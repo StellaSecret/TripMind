@@ -1,0 +1,13 @@
+{
+  "appId": "fr.tripmind.app",
+  "appName": "TripMind",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}

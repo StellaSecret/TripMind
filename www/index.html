@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="theme-color" content="#070D1A"/>
+  <title>TripMind</title>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ════════════════════════════════════
+       ÉCRAN 1 : RECHERCHE
+  ═══════════════════════════════════════ -->
+  <div class="scr on" id="scr-search">
+    <div class="ss">
+      <div class="grid-bg"></div>
+      <div class="logo-row">
+        <div class="logo-ic">🧭</div>
+        <div>
+          <div class="logo-nm">TripMind</div>
+          <div class="logo-sub">France · APIs publiques</div>
+        </div>
+      </div>
+
+      <div class="sc">
+        <div class="sc-ttl">🛰 Données temps réel — aucun token requis</div>
+        <div class="apis-strip">
+          <span class="api-pill">✓ Open-Meteo météo</span>
+          <span class="api-pill">✓ Open-Meteo AQI</span>
+          <span class="api-pill">✓ Open-Meteo pollen</span>
+          <span class="api-pill">✓ BAN géocodage</span>
+          <span class="api-pill">✓ OSRM trafic</span>
+          <span id="token-badge-search" class="api-pill api-pill-sncf" style="display:none">✓ SNCF trains</span>
+        </div>
+
+        <!-- Champ ORIGINE -->
+        <div class="ig">
+          <label class="il" for="orig-inp">Ville de départ</label>
+          <span class="ii">📍</span>
+          <input class="inf" id="orig-inp" type="text"
+                 placeholder="Ex: Paris, Lyon, Bordeaux…"
+                 autocomplete="off" spellcheck="false"
+                 aria-autocomplete="list" aria-controls="orig-ac" aria-expanded="false"/>
+          <ul class="ac-list" id="orig-ac" role="listbox" aria-label="Suggestions de villes"></ul>
+        </div>
+
+        <div class="sw-btn" id="swap-btn" role="button" aria-label="Inverser origine et destination">⇅</div>
+
+        <!-- Champ DESTINATION -->
+        <div class="ig" style="margin-top:5px">
+          <label class="il" for="dest-inp">Ville de destination</label>
+          <span class="ii">🏁</span>
+          <input class="inf" id="dest-inp" type="text"
+                 placeholder="Ex: Marseille, Nantes, Nice…"
+                 autocomplete="off" spellcheck="false"
+                 aria-autocomplete="list" aria-controls="dest-ac" aria-expanded="false"/>
+          <ul class="ac-list" id="dest-ac" role="listbox" aria-label="Suggestions de villes"></ul>
+        </div>
+
+        <div class="err-box" id="ebox" role="alert"></div>
+        <button class="main-btn" id="analyze-btn">Analyser le trajet →</button>
+
+        <div style="text-align:center;margin-top:10px">
+          <button id="go-settings"
+            style="background:none;border:none;color:var(--t3);font-size:.67rem;cursor:pointer;font-family:var(--fm)">
+            ⚙ Configurer l'API SNCF (trains temps réel)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       ÉCRAN 2 : PARAMÈTRES SNCF API
+  ═══════════════════════════════════════ -->
+  <div class="scr" id="scr-settings">
+    <div class="settings-scr">
+      <div class="settings-header">
+        <button class="back-icon-btn" id="settings-back">← Retour</button>
+        <div class="settings-title">Paramètres</div>
+      </div>
+
+      <div class="navitia-card">
+        <div class="navitia-header">
+          <div class="navitia-logo">🚆</div>
+          <div>
+            <div class="navitia-name">API SNCF officielle</div>
+            <div class="navitia-sub">Gratuit · 150 000 requêtes/mois</div>
+          </div>
+        </div>
+
+        <div class="navitia-steps">
+          <div class="navitia-step">
+            <span class="step-num">1</span>
+            Allez sur <strong>numerique.sncf.com/startup/api</strong>
+          </div>
+          <div class="navitia-step">
+            <span class="step-num">2</span>
+            Cliquez sur <strong>"Commencez à utiliser l'API"</strong> → créez un compte
+          </div>
+          <div class="navitia-step">
+            <span class="step-num">3</span>
+            Votre token vous est envoyé par email → collez-le ci-dessous
+          </div>
+        </div>
+
+        <a class="navitia-link" href="https://numerique.sncf.com/startup/api/token-developpeur/" target="_blank">
+          🔗 Obtenir un token SNCF gratuit →
+        </a>
+
+        <label class="token-label" for="sncf-token-input">Token API SNCF</label>
+        <input class="token-input" id="sncf-token-input"
+               type="password"
+               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+               autocomplete="off" spellcheck="false"/>
+
+        <div class="token-status" id="token-status"></div>
+
+        <div style="display:flex;gap:8px">
+          <button class="save-btn" id="sncf-test-btn"
+                  style="flex:0 0 auto;background:linear-gradient(135deg,#1E2D47,#162035);border:1px solid var(--bd2)">
+            Tester
+          </button>
+          <button class="save-btn" id="sncf-save-btn">
+            Enregistrer →
+          </button>
+        </div>
+      </div>
+
+      <div class="free-apis-card">
+        <div class="free-apis-title">APIs intégrées sans token</div>
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo</strong> — météo, UV, qualité air, pollen (Copernicus CAMS + SILAM)</div>
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>Base Adresse Nationale</strong> — géocodage France + autocomplétion (data.gouv.fr)</div>
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>OSRM / OpenStreetMap</strong> — itinéraire routier théorique</div>
+        <div style="font-size:.65rem;color:var(--t3);margin-top:8px;line-height:1.5">
+          ℹ Le token SNCF est stocké uniquement en local sur votre appareil. Il n'est jamais envoyé à un serveur tiers.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       ÉCRAN 3 : CHARGEMENT
+  ═══════════════════════════════════════ -->
+  <div class="scr" id="scr-loading">
+    <div class="ls">
+      <div class="orb"></div>
+      <div class="lmsg" id="lmsg">Initialisation…</div>
+      <div class="lsteps">
+        <div class="lstep" id="s0"><div class="dot"></div>Géocodage BAN (data.gouv.fr)</div>
+        <div class="lstep" id="s1"><div class="dot"></div>Météo + UV · Open-Meteo</div>
+        <div class="lstep" id="s2"><div class="dot"></div>Qualité de l'air · Copernicus CAMS</div>
+        <div class="lstep" id="s3"><div class="dot"></div>Pollen · Open-Meteo SILAM</div>
+        <div class="lstep" id="s4"><div class="dot"></div>Itinéraire routier · OSRM</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       ÉCRAN 4 : DASHBOARD
+  ═══════════════════════════════════════ -->
+  <div class="scr" id="scr-dash">
+    <div class="dh">
+      <div class="dr">
+        <span class="cpill" id="d-orig">—</span>
+        <span class="rarr">→</span>
+        <span class="cpill" id="d-dest">—</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="settings-btn" id="settings-icon" aria-label="Paramètres">⚙️</button>
+        <button class="back-btn" id="back-btn">← Modifier</button>
+      </div>
+    </div>
+
+    <div class="sbanner">
+      <div class="sci" id="score-circ"></div>
+      <div style="flex:1">
+        <div style="font-size:.92rem;font-weight:700;margin-bottom:2px" id="score-lbl">—</div>
+        <div style="font-size:.7rem;color:var(--t2)">Calculé sur météo, air et pollen</div>
+        <div style="font-size:.65rem;color:var(--t3);font-family:var(--fm);margin-top:5px" id="score-detail">—</div>
+      </div>
+    </div>
+
+    <div class="stabs">
+      <div class="tab active" data-tab="overview">🗺 Aperçu</div>
+      <div class="tab" data-tab="route">🚗 Trajet</div>
+      <div class="tab" data-tab="air">💨 Air & Pollen</div>
+      <div class="tab" data-tab="sante">💊 Santé</div>
+      <div class="tab" data-tab="trains">🚆 Trains</div>
+    </div>
+
+    <div class="cards" id="tab-content"></div>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Script sans module pour compatibilité Capacitor WebView -->
+<script src="js/app.js"></script>
+</body>
+</html>

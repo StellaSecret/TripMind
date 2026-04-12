@@ -1,0 +1,35 @@
+# ── Node ──────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Android build outputs ─────────────────────────────
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# ── Capacitor generated ───────────────────────────────
+# Décommenter la ligne suivante si vous ne souhaitez PAS
+# commiter le dossier android/ (la CI le régénérera automatiquement)
+# android/
+
+# ── IDE & OS ──────────────────────────────────────────
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+*.swo
+
+# ── Env & secrets ─────────────────────────────────────
+.env
+.env.local
+.env.*.local
+secrets.json
