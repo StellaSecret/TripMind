@@ -1,0 +1,45 @@
+name: Deploy TripMind to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permissions nécessaires pour déployer sur GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un seul déploiement à la fois, pas d'annulation si en cours
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # 1 — Récupérer le code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2 — Configurer GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # 3 — Uploader le dossier www/ comme artifact Pages
+      #     Le dossier www/ est directement la web app (HTML/CSS/JS)
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./www
+
+      # 4 — Déployer sur GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
