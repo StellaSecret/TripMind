@@ -2,8 +2,13 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8"/>
+  <!-- viewport-fit=cover est REQUIS pour que env(safe-area-inset-*) fonctionne -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <meta name="theme-color" content="#070D1A"/>
+  <meta name="theme-color" content="#0E1726"/>
+  <!-- Android : status bar transparente pour que le contenu passe dessous -->
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <title>TripMind</title>
   <link rel="stylesheet" href="css/style.css"/>
 </head>
