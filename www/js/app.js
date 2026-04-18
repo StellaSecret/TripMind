@@ -304,51 +304,79 @@
    ──────────────────────────────────────────────────── */
   function fetchAirQuality(lat, lon) {
     var offset = dayOffset();
+
+    // Open-Meteo AQ : polluants fiables sur ~5 jours (120h), pollens sur ~5 jours aussi.
+    // On demande 6 jours pour couvrir J+5 avec marge, pas 16 (données absentes au-delà).
+    var forecastDays = Math.min(offset + 2, 6);
     var url = 'https://air-quality-api.open-meteo.com/v1/air-quality?' +
       'latitude=' + lat + '&longitude=' + lon +
-      '&current=european_aqi,pm10,pm2_5,ozone,nitrogen_dioxide' +
-      '&hourly=european_aqi,pm2_5,pm10,alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen' +
-      '&timezone=Europe%2FParis&forecast_days=16';
+      '&hourly=european_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,' +
+      'alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen' +
+      '&timezone=Europe%2FParis&forecast_days=' + forecastDays;
 
     return fetch(url)
       .then(function(r) { if (!r.ok) throw new Error('AQI HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         var h = d.hourly;
-        var hi; // index horaire cible
 
-        var pm25, pm10, aqi;
-        if (offset === 0) {
-          // Aujourd'hui : données current
-          var c = d.current;
-          aqi  = c.european_aqi;
-          pm25 = c.pm2_5  != null ? c.pm2_5.toFixed(1)  : null;
-          pm10 = c.pm10   != null ? c.pm10.toFixed(1)   : null;
-          hi   = Math.min(new Date().getHours(), 23);
-        } else {
-          // Jour futur : heure 12h du jour offset
-          hi   = offset * 24 + 12;
-          aqi  = h.european_aqi ? Math.round(h.european_aqi[hi] || 0) : null;
-          pm25 = h.pm2_5  && h.pm2_5[hi]  != null ? h.pm2_5[hi].toFixed(1)  : null;
-          pm10 = h.pm10   && h.pm10[hi]   != null ? h.pm10[hi].toFixed(1)   : null;
+        // Lecture sécurisée d'un index dans un tableau horaire
+        function safeVal(arr, idx) {
+          if (!arr || idx < 0 || idx >= arr.length) return null;
+          var v = arr[idx];
+          return (v !== null && v !== undefined && !isNaN(v)) ? v : null;
+        }
+        function safeRound(arr, idx) {
+          var v = safeVal(arr, idx); return v !== null ? Math.round(v) : null;
+        }
+        function safeFix(arr, idx) {
+          var v = safeVal(arr, idx); return v !== null ? (+v).toFixed(1) : null;
         }
 
+        // Index horaire cible : heure actuelle pour J+0, midi pour les autres
+        var hi = offset === 0
+          ? Math.min(new Date().getHours(), (h.european_aqi || []).length - 1)
+          : Math.min(offset * 24 + 12, (h.european_aqi || []).length - 1);
+
+        // Si l'index dépasse le tableau (données non disponibles pour ce jour),
+        // prendre le dernier index disponible avec un flag d'avertissement
+        var maxIdx = (h.european_aqi || []).length - 1;
+        var outOfRange = hi > maxIdx;
+        hi = Math.max(0, Math.min(hi, maxIdx));
+
+        var aqi  = safeRound(h.european_aqi, hi);
+        var pm25 = safeFix(h.pm2_5, hi);
+        var pm10 = safeFix(h.pm10, hi);
+        var no2  = safeFix(h.nitrogen_dioxide, hi);
+        var o3   = safeFix(h.ozone, hi);
+
         var pollens = {
-          'Aulne':     Math.round((h.alder_pollen  && h.alder_pollen[hi])   || 0),
-          'Bouleau':   Math.round((h.birch_pollen   && h.birch_pollen[hi])   || 0),
-          'Graminées': Math.round((h.grass_pollen   && h.grass_pollen[hi])   || 0),
-          'Armoise':   Math.round((h.mugwort_pollen && h.mugwort_pollen[hi]) || 0),
-          'Olivier':   Math.round((h.olive_pollen   && h.olive_pollen[hi])   || 0)
+          'Aulne':     safeRound(h.alder_pollen, hi)  || 0,
+          'Bouleau':   safeRound(h.birch_pollen, hi)  || 0,
+          'Graminées': safeRound(h.grass_pollen, hi)  || 0,
+          'Armoise':   safeRound(h.mugwort_pollen, hi)|| 0,
+          'Olivier':   safeRound(h.olive_pollen, hi)  || 0
         };
+
         var polMax = Math.max.apply(null, Object.values(pollens));
         var polActifs = Object.keys(pollens).filter(function(k) { return pollens[k] > 2; });
-        var polNiveau = polMax < 10  ? {l:'Faible',c:'bg'} :
-                        polMax < 50  ? {l:'Modéré',c:'ba'} :
-                        polMax < 200 ? {l:'Élevé',c:'ba'} :
-                                       {l:'Très élevé',c:'br'};
+        var polNiveau = outOfRange
+          ? {l:'Données indisponibles',c:'bb'}
+          : polMax < 10  ? {l:'Faible',c:'bg'}
+          : polMax < 50  ? {l:'Modéré',c:'ba'}
+          : polMax < 200 ? {l:'Élevé',c:'ba'}
+          :                {l:'Très élevé',c:'br'};
+
         return {
-          aqi: aqi, pm25: pm25, pm10: pm10,
-          o3: null, no2: null,
-          pollens: pollens, polMax: polMax, polActifs: polActifs, polNiveau: polNiveau
+          aqi: outOfRange ? null : aqi,
+          pm25: outOfRange ? null : pm25,
+          pm10: outOfRange ? null : pm10,
+          o3: outOfRange ? null : o3,
+          no2: outOfRange ? null : no2,
+          pollens: outOfRange ? {} : pollens,
+          polMax: outOfRange ? 0 : polMax,
+          polActifs: outOfRange ? [] : polActifs,
+          polNiveau: polNiveau,
+          outOfRange: outOfRange
         };
       });
   }
@@ -542,15 +570,18 @@
       '</div></div></div>'+
 
       '<div class="card"><div class="ch"><span class="ct">💨 Qualité de l\'air</span><span class="src-tag">Copernicus CAMS</span></div><div class="cb">'+
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'+
-      '<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:800;font-family:var(--fm);flex-shrink:0" class="'+aqI.c+'">'+(aq.aqi!=null?aq.aqi:'—')+'</div>'+
-      '<div><div style="font-weight:700;font-size:.85rem">'+aqI.l+'</div>'+
-      '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">Indice AQI européen'+(m.isForecast?' · Prévision':' · Actuel')+'</div></div>'+
-      '<span class="badge '+aqI.c+'" style="margin-left:auto">'+aqI.l+'</span></div>'+
-      '<div class="wg">'+
-      (aq.pm25!=null?'<div class="wstat"><div class="wsl">PM₂.₅</div><div class="wsv" style="font-size:.78rem">'+aq.pm25+' μg/m³</div></div>':'')+
-      (aq.pm10!=null?'<div class="wstat"><div class="wsl">PM₁₀</div><div class="wsv" style="font-size:.78rem">'+aq.pm10+' μg/m³</div></div>':'')+
-      '</div></div></div>'+
+      (aq.outOfRange || aq.aqi == null
+        ? '<div class="info-note">⏱ Données AQI non disponibles pour J+'+dayOffset()+' (portée max ~5 jours).</div>'
+        : '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'+
+          '<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:800;font-family:var(--fm);flex-shrink:0" class="'+aqI.c+'">'+aq.aqi+'</div>'+
+          '<div><div style="font-weight:700;font-size:.85rem">'+aqI.l+'</div>'+
+          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">Indice AQI européen'+(m.isForecast?' · Prévision':' · Actuel')+'</div></div>'+
+          '<span class="badge '+aqI.c+'" style="margin-left:auto">'+aqI.l+'</span></div>'+
+          '<div class="wg">'+
+          (aq.pm25!=null?'<div class="wstat"><div class="wsl">PM₂.₅</div><div class="wsv" style="font-size:.78rem">'+aq.pm25+' μg/m³</div></div>':'')+
+          (aq.pm10!=null?'<div class="wstat"><div class="wsl">PM₁₀</div><div class="wsv" style="font-size:.78rem">'+aq.pm10+' μg/m³</div></div>':'')+
+          '</div>'
+      )+'</div></div>'+
 
       '<div class="card"><div class="ch"><span class="ct">💡 Recommandations</span></div><div class="cb">'+
       '<div class="rcard"><div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'+
@@ -591,26 +622,72 @@
   }
 
   function renderAir() {
-    var aq=DATA.aq, m=DATA.m;
-    var keys=Object.keys(aq.pollens), maxP=Math.max.apply(null,Object.values(aq.pollens).concat([1]));
+    var aq=DATA.aq, m=DATA.m, off=dayOffset();
+    var aqI=euAqi(aq.aqi);
+
+    // Section pollen
+    var pollenHTML;
+    if (aq.outOfRange || Object.keys(aq.pollens).length === 0) {
+      pollenHTML =
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
+        '<span class="badge bb">Données non disponibles</span></div>'+
+        '<div class="info-note">⏱ Open-Meteo ne fournit les prévisions de pollen et de qualité '+
+        'de l\'air que sur ~5 jours. Pour J+'+off+', les données ne sont pas encore disponibles.</div>';
+    } else {
+      var keys=Object.keys(aq.pollens);
+      var maxP=Math.max.apply(null,Object.values(aq.pollens).concat([1]));
+      pollenHTML =
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
+        '<span class="badge '+aq.polNiveau.c+'">'+aq.polNiveau.l+'</span>'+
+        '<span style="font-size:.65rem;color:var(--t3);font-family:var(--fm)">'+aq.polMax+' grain/m³ max</span></div>'+
+        keys.map(function(k){
+          var v=aq.pollens[k],pct=Math.min(100,(v/maxP)*100).toFixed(1);
+          var col=v<10?'#10B981':v<50?'#F59E0B':v<200?'#F97316':'#EF4444';
+          return '<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;margin-bottom:3px">'+
+            '<span style="font-size:.72rem">'+k+'</span>'+
+            '<span style="font-size:.68rem;font-family:var(--fm);color:'+col+'">'+v+'</span></div>'+
+            '<div class="pbar"><div class="pfill" style="width:'+pct+'%;background:'+col+'"></div></div></div>';
+        }).join('')+
+        (aq.polActifs.length
+          ? '<div class="ptags" style="margin-top:8px">'+aq.polActifs.map(function(t){return '<span class="ptag">🌸 '+t+'</span>';}).join('')+'</div>'
+          : '<div style="font-size:.72rem;color:var(--em);margin-top:6px">✓ Aucun pollen significatif</div>');
+    }
+
+    // Section polluants
+    var polluantsHTML;
+    if (aq.outOfRange || aq.aqi == null) {
+      polluantsHTML = '<div class="info-note">⏱ Données de polluants non disponibles pour ce jour.</div>';
+    } else {
+      var polluants=[['PM₂.₅',aq.pm25,'μg/m³',25,'Particules fines'],['PM₁₀',aq.pm10,'μg/m³',50,'Particules grossières'],
+        ['NO₂',aq.no2,'μg/m³',40,"Dioxyde d'azote"],['Ozone',aq.o3,'μg/m³',120,'Ozone troposphérique']];
+      polluantsHTML = polluants.map(function(p){
+        if(p[1]==null) return '';
+        var n=+p[1],col=n<p[3]*0.5?'#10B981':n<p[3]?'#F59E0B':'#EF4444';
+        return '<div class="srow"><div class="d2" style="background:'+col+';box-shadow:0 0 5px '+col+'"></div>'+
+          '<div style="flex:1"><div class="stxt">'+p[0]+' — '+p[1]+' '+p[2]+'</div>'+
+          '<div class="ssub2">'+p[4]+'</div></div></div>';
+      }).join('') || '<div style="font-size:.72rem;color:var(--t3);padding:4px 0">Données polluants indisponibles</div>';
+    }
+
     return (
       '<div class="card"><div class="ch"><span class="ct">🌿 Pollen</span>'+
       '<div style="display:flex;align-items:center;gap:5px">'+
-      (m.isForecast?'<span class="forecast-badge">J+'+dayOffset()+'</span>':'')+
-      '<span class="src-tag">SILAM</span></div></div><div class="cb">'+
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
-      '<span class="badge '+aq.polNiveau.c+'">'+aq.polNiveau.l+'</span>'+
-      '<span style="font-size:.65rem;color:var(--t3);font-family:var(--fm)">'+aq.polMax+' grain/m³ max</span></div>'+
-      keys.map(function(k){
-        var v=aq.pollens[k],pct=Math.min(100,(v/maxP)*100).toFixed(1);
-        var col=v<10?'#10B981':v<50?'#F59E0B':v<200?'#F97316':'#EF4444';
-        return '<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;margin-bottom:3px">'+
-          '<span style="font-size:.72rem">'+k+'</span><span style="font-size:.68rem;font-family:var(--fm);color:'+col+'">'+v+'</span></div>'+
-          '<div class="pbar"><div class="pfill" style="width:'+pct+'%;background:'+col+'"></div></div></div>';
-      }).join('')+
-      (aq.polActifs.length?'<div class="ptags" style="margin-top:8px">'+aq.polActifs.map(function(t){return '<span class="ptag">🌸 '+t+'</span>';}).join('')+'</div>':
-       '<div style="font-size:.72rem;color:var(--em);margin-top:6px">✓ Aucun pollen significatif</div>')+
-      '</div></div>'
+      (off>0?'<span class="forecast-badge">J+'+off+'</span>':'')+
+      '<span class="src-tag">SILAM</span></div></div>'+
+      '<div class="cb">'+pollenHTML+'</div></div>'+
+
+      '<div class="card"><div class="ch"><span class="ct">💨 Qualité air & polluants</span>'+
+      '<div style="display:flex;align-items:center;gap:5px">'+
+      (off>0?'<span class="forecast-badge">J+'+off+'</span>':'')+
+      '<span class="src-tag">CAMS</span></div></div><div class="cb">'+
+      (aq.aqi!=null
+        ? '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'+
+          '<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:800;font-family:var(--fm);flex-shrink:0" class="'+aqI.c+'">'+aq.aqi+'</div>'+
+          '<div><div style="font-weight:700;font-size:.85rem">'+aqI.l+'</div>'+
+          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">Indice AQI européen</div></div>'+
+          '<span class="badge '+aqI.c+'" style="margin-left:auto">'+aqI.l+'</span></div>'
+        : '')+
+      polluantsHTML+'</div></div>'
     );
   }
 
