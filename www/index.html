@@ -37,7 +37,7 @@
           <span class="api-pill">✓ Open-Meteo pollen</span>
           <span class="api-pill">✓ BAN géocodage</span>
           <span class="api-pill">✓ OSRM trafic</span>
-          <span id="token-badge-search" class="api-pill api-pill-sncf" style="display:none">✓ SNCF trains</span>
+          <span class="api-pill" style="background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.25);color:#06B6D4">✓ Transitous trains</span>
         </div>
 
         <!-- Sélecteur de date -->
@@ -79,7 +79,7 @@
         <div style="text-align:center;margin-top:10px">
           <button id="go-settings"
             style="background:none;border:none;color:var(--t3);font-size:.67rem;cursor:pointer;font-family:var(--fm)">
-            ⚙ Configurer l'API SNCF (trains temps réel)
+            ℹ À propos des sources de données
           </button>
         </div>
       </div>
@@ -87,69 +87,55 @@
   </div>
 
   <!-- ════════════════════════════════════
-       ÉCRAN 2 : PARAMÈTRES SNCF API
+       ÉCRAN 2 : À PROPOS DES APIS
   ═══════════════════════════════════════ -->
   <div class="scr" id="scr-settings">
     <div class="settings-scr">
       <div class="settings-header">
         <button class="back-icon-btn" id="settings-back">← Retour</button>
-        <div class="settings-title">Paramètres</div>
+        <div class="settings-title">Sources de données</div>
       </div>
 
+      <!-- Transitous -->
       <div class="navitia-card">
         <div class="navitia-header">
           <div class="navitia-logo">🚆</div>
           <div>
-            <div class="navitia-name">API SNCF officielle</div>
-            <div class="navitia-sub">Gratuit · 150 000 requêtes/mois</div>
+            <div class="navitia-name">Transitous — Trains &amp; transports</div>
+            <div class="navitia-sub">Gratuit · Open source · Aucun token</div>
           </div>
         </div>
-
         <div class="navitia-steps">
           <div class="navitia-step">
-            <span class="step-num">1</span>
-            Allez sur <strong>numerique.sncf.com/startup/api</strong>
+            <span class="step-num">✓</span>
+            Moteur <strong>MOTIS 2</strong> — couverture SNCF France via données GTFS ouvertes
           </div>
           <div class="navitia-step">
-            <span class="step-num">2</span>
-            Cliquez sur <strong>"Commencez à utiliser l'API"</strong> → créez un compte
+            <span class="step-num">✓</span>
+            Données temps réel (retards, annulations) sur certaines lignes
           </div>
           <div class="navitia-step">
-            <span class="step-num">3</span>
-            Votre token vous est envoyé par email → collez-le ci-dessous
+            <span class="step-num">✓</span>
+            Service communautaire FOSS — pas de compte requis
           </div>
         </div>
-
-        <a class="navitia-link" href="https://numerique.sncf.com/startup/api/token-developpeur/" target="_blank">
-          🔗 Obtenir un token SNCF gratuit →
+        <a class="navitia-link" href="https://transitous.org" target="_blank" style="background:linear-gradient(135deg,#0284c7,#06B6D4)">
+          🔗 transitous.org →
         </a>
-
-        <label class="token-label" for="sncf-token-input">Token API SNCF</label>
-        <input class="token-input" id="sncf-token-input"
-               type="password"
-               placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-               autocomplete="off" spellcheck="false"/>
-
-        <div class="token-status" id="token-status"></div>
-
-        <div style="display:flex;gap:8px">
-          <button class="save-btn" id="sncf-test-btn"
-                  style="flex:0 0 auto;background:linear-gradient(135deg,#1E2D47,#162035);border:1px solid var(--bd2)">
-            Tester
-          </button>
-          <button class="save-btn" id="sncf-save-btn">
-            Enregistrer →
-          </button>
-        </div>
       </div>
 
+      <!-- Toutes les APIs -->
       <div class="free-apis-card">
-        <div class="free-apis-title">APIs intégrées sans token</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo</strong> — météo, UV, qualité air, pollen (Copernicus CAMS + SILAM)</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>Base Adresse Nationale</strong> — géocodage France + autocomplétion (data.gouv.fr)</div>
+        <div class="free-apis-title">Toutes les sources — 100% sans token</div>
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo</strong> — météo complète + UV (16 jours)</div>
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo AQ</strong> — AQI, PM2.5, PM10, NO₂, ozone (Copernicus CAMS)</div>
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo pollen</strong> — 5 espèces (modèle SILAM)</div>
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>Base Adresse Nationale</strong> — géocodage + autocomplétion (data.gouv.fr)</div>
         <div class="free-api-row"><div class="free-api-dot"></div><strong>OSRM / OpenStreetMap</strong> — itinéraire routier théorique</div>
-        <div style="font-size:.65rem;color:var(--t3);margin-top:8px;line-height:1.5">
-          ℹ Le token SNCF est stocké uniquement en local sur votre appareil. Il n'est jamais envoyé à un serveur tiers.
+        <div class="free-api-row"><div class="free-api-dot"></div><strong>Transitous / MOTIS 2</strong> — trains et transports publics</div>
+        <div style="font-size:.65rem;color:var(--t3);margin-top:10px;line-height:1.6">
+          TripMind ne collecte aucune donnée personnelle.<br>
+          Aucun compte, aucun token, aucun tracking.
         </div>
       </div>
     </div>

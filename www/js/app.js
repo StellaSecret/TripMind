@@ -8,7 +8,7 @@
  *  - Open-Meteo               https://api.open-meteo.com         (sans token, 16 jours)
  *  - Open-Meteo Air Quality   https://air-quality-api.open-meteo.com (sans token)
  *  - OSRM / OpenStreetMap     https://router.project-osrm.org   (sans token)
- *  - API SNCF officielle      https://api.sncf.com/v1/          (token optionnel)
+ *  - Transitous / MOTIS 2     https://api.transitous.org/api/   (sans token — FOSS uniquement)
  */
 
 (function () {
@@ -24,14 +24,10 @@
     return h > 0 ? h + 'h' + pad(m) : m + ' min';
   }
 
-  /* Convertit un objet Date en string datetime Navitia/SNCF YYYYMMDDTHHmmss */
-  function toSNCFDate(d) {
-    return d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
-           'T' + pad(d.getHours()) + pad(d.getMinutes()) + '00';
-  }
-  function fmtNavTime(dt) {
-    if (!dt || dt.length < 13) return '--:--';
-    return dt.substring(9, 11) + ':' + dt.substring(11, 13);
+  /* Convertit un objet Date en ISO 8601 pour MOTIS : "2024-06-12T08:00:00" */
+  function toMotisDate(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+           'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':00';
   }
 
   /* ─── Gestion de la date sélectionnée ─────────────── */
@@ -54,7 +50,7 @@
     return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
-  /* ─── Stockage token SNCF ──────────────────────────── */
+  /* ─── Stockage (plus de token requis) ─────────────── */
   var STORE = {
     get token() { try { return localStorage.getItem('tm_sncf_token') || ''; } catch(e) { return ''; } },
     set token(v) { try { localStorage.setItem('tm_sncf_token', (v || '').trim()); } catch(e) {} }
@@ -105,23 +101,6 @@
     if (a<=40) return {l:'Bon',c:'bg'}; if (a<=60) return {l:'Satisfaisant',c:'ba'};
     if (a<=80) return {l:'Médiocre',c:'ba'}; if (a<=100) return {l:'Mauvais',c:'br'};
     return {l:'Très mauvais',c:'br'};
-  }
-  function shortMode(m) {
-    var v=(m||'').toLowerCase();
-    if (v.indexOf('grande vitesse')>=0||v.indexOf('tgv')>=0) return 'TGV';
-    if (v.indexOf('ouigo')>=0) return 'OUIGO';
-    if (v.indexOf('intercit')>=0) return 'Intercités';
-    if (v.indexOf('ter')>=0) return 'TER';
-    if (v.indexOf('eurostar')>=0) return 'Eurostar';
-    if (v.indexOf('bus')>=0) return 'Bus';
-    return 'Train';
-  }
-  function reliab(m) {
-    var v=(m||'').toLowerCase();
-    if (v.indexOf('grande vitesse')>=0) return 92;
-    if (v.indexOf('intercit')>=0) return 88;
-    if (v.indexOf('ter')>=0) return 84;
-    return 86;
   }
 
   /* ─── Sélecteur de date ─────────────────────────────
@@ -399,65 +378,152 @@
       });
   }
 
-  /* ─── API : SNCF ─────────────────────────────────────
-   * On passe selectedDate pour chercher les trains
-   * au bon jour. Heure par défaut : 08:00 si futur.
+  /* ─── API : Transitous / MOTIS 2 ─────────────────────
+   *
+   * Endpoint public : https://api.transitous.org/api/
+   * Aucun token requis. FOSS et non commercial uniquement.
+   * Doc : https://transitous.org/api/
+   *
+   * Endpoint de planification : GET /api/v1/plan
+   *   fromPlace = "lat,lon,level"   (level = 0 = rez-de-chaussée)
+   *   toPlace   = "lat,lon,level"
+   *   time      = ISO 8601 "YYYY-MM-DDTHH:MM:SS"
+   *   numItineraries = nombre max de trajets retournés
+   *   transportModes = filtre de modes (TRANSIT pour tout TP)
+   *
+   * Réponse : { plan: { itineraries: [...] } }
+   * Chaque itinerary contient :
+   *   startTime / endTime : timestamps Unix ms
+   *   duration            : secondes
+   *   legs                : tableau de segments
+   *     leg.mode          : "WALK", "RAIL", "BUS", "SUBWAY", …
+   *     leg.routeShortName / leg.headsign : numéro/nom
+   *     leg.from.name / leg.to.name
+   *     leg.realTime      : booléen (données temps réel disponibles)
+   *
+   * User-Agent REQUIS par la politique Transitous.
    ──────────────────────────────────────────────────── */
-  function fetchTrainsSNCF(oLat, oLon, dLat, dLon, token) {
-    if (!token) return Promise.resolve({ _nk: true, trains: [] });
+  var TRANSITOUS_UA = 'TripMind/4.0 (https://github.com/StellaSecret/TripMind; contact via GitHub)';
+  var TRANSITOUS_TIMEOUT_MS = 12000; // 12s — au-delà Transitous est probablement surchargé
 
-    // Pour un jour futur on cherche à partir de 08:00
-    var dt = new Date(selectedDate);
-    if (dayOffset() > 0) { dt.setHours(8, 0, 0, 0); }
-    else { dt = new Date(); } // maintenant si aujourd'hui
-
-    var url = 'https://api.sncf.com/v1/coverage/sncf/journeys?' +
-      'from=' + oLon + ';' + oLat + '&to=' + dLon + ';' + dLat +
-      '&datetime=' + toSNCFDate(dt) + '&count=5&min_nb_journeys=1';
-
-    return fetch(url, { headers: { 'Authorization': 'Basic ' + btoa(token + ':') } })
-      .then(function(r) {
-        if (r.status === 401) return { _err: 'Token SNCF invalide (401)', trains: [] };
-        if (r.status === 404) return { _empty: true, trains: [] };
-        if (!r.ok) return { _err: 'API SNCF HTTP ' + r.status, trains: [] };
-        return r.json().then(function(d) {
-          var journeys = (d.journeys || []).filter(function(j) {
-            return j.sections && j.sections.some(function(s) { return s.type === 'public_transport'; });
-          }).slice(0, 3);
-          if (!journeys.length) return { _empty: true, trains: [] };
-          return {
-            trains: journeys.map(function(j) {
-              var pt = j.sections.filter(function(s) { return s.type === 'public_transport'; });
-              var first = pt[0] || {};
-              var mode = (first.display_informations || {}).commercial_mode || 'Train';
-              var num  = ((first.display_informations || {}).headsign ||
-                          (first.display_informations || {}).label || '').trim();
-              return {
-                depart: fmtNavTime(j.departure_date_time),
-                arrivee: fmtNavTime(j.arrival_date_time),
-                duree: fmtDur(j.duration),
-                numero: shortMode(mode) + (num ? ' ' + num : ''),
-                transfers: j.nb_transfers || 0,
-                fiabilite: reliab(mode)
-              };
-            })
-          };
-        });
-      })
-      .catch(function(e) { return { _err: 'Réseau : ' + e.message, trains: [] }; });
+  /* Fetch avec timeout via AbortController */
+  function fetchWithTimeout(url, opts, timeoutMs) {
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, timeoutMs) : null;
+    var fetchOpts = ctrl ? Object.assign({}, opts, { signal: ctrl.signal }) : opts;
+    return fetch(url, fetchOpts).finally(function() { if (timer) clearTimeout(timer); });
   }
 
-  function testSNCFToken(token) {
-    if (!token || !token.trim()) return Promise.resolve({ ok: false, message: 'Token vide' });
-    return fetch('https://api.sncf.com/v1/coverage/', {
-      headers: { 'Authorization': 'Basic ' + btoa(token.trim() + ':') }
-    })
-      .then(function(r) {
-        if (r.status === 401) return { ok: false, message: 'Token invalide (401 Unauthorized)' };
-        if (!r.ok) return { ok: false, message: 'Erreur HTTP ' + r.status };
-        return { ok: true, message: '✓ Token valide — API SNCF connectée' };
-      })
-      .catch(function(e) { return { ok: false, message: 'Erreur réseau : ' + e.message }; });
+  /* Parse une réponse MOTIS et retourne { trains } ou { _empty } */
+  function parseMotisResponse(d) {
+    var itins = (d.plan && d.plan.itineraries) ? d.plan.itineraries : [];
+    var ptItins = itins.filter(function(it) {
+      return it.legs && it.legs.some(function(l) {
+        return l.mode !== 'WALK' && l.mode !== 'BICYCLE' && l.mode !== 'CAR';
+      });
+    }).slice(0, 3);
+    if (!ptItins.length) return { _empty: true, trains: [] };
+    var trains = ptItins.map(function(it) {
+      var ptLegs = it.legs.filter(function(l) {
+        return l.mode !== 'WALK' && l.mode !== 'BICYCLE';
+      });
+      var first = ptLegs[0] || {};
+      return {
+        depart:    tsToHHMM(it.startTime),
+        arrivee:   tsToHHMM(it.endTime),
+        duree:     fmtDur(Math.round(it.duration)),
+        numero:    modeToLabel(first.mode || '') + (first.routeShortName ? ' ' + first.routeShortName : first.headsign ? ' ' + first.headsign : ''),
+        transfers: Math.max(0, ptLegs.length - 1),
+        fiabilite: modeToReliab(first.mode || ''),
+        realTime:  ptLegs.some(function(l) { return l.realTime; })
+      };
+    });
+    return { trains: trains };
+  }
+
+  function fetchTrains(oLat, oLon, dLat, dLon) {
+    var dt = new Date(selectedDate);
+    if (dayOffset() > 0) { dt.setHours(8, 0, 0, 0); } else { dt = new Date(); }
+
+    var from = oLat + ',' + oLon + ',0';
+    var to   = dLat + ',' + dLon + ',0';
+    var url  = 'https://api.transitous.org/api/v1/plan?' +
+      'fromPlace=' + encodeURIComponent(from) +
+      '&toPlace='  + encodeURIComponent(to) +
+      '&time='     + encodeURIComponent(toMotisDate(dt)) +
+      '&numItineraries=5' +
+      '&transportModes=TRANSIT,WALK';
+
+    var headers = { 'Referer': 'https://github.com/StellaSecret/TripMind' };
+    // User-Agent non envoyable par les browsers dans les requêtes fetch cross-origin
+    // → on utilise Referer comme identifiant comme recommandé par Transitous
+
+    function doFetch() {
+      return fetchWithTimeout(url, { headers: headers }, TRANSITOUS_TIMEOUT_MS)
+        .then(function(r) {
+          // 500 / 504 = serveur surchargé → on retourne un état spécial pour retry
+          if (r.status === 500 || r.status === 504 || r.status === 502 || r.status === 503) {
+            return { _overloaded: true, status: r.status };
+          }
+          if (r.status === 429) return { _err: 'Service Transitous temporairement limité (429). Réessayez dans quelques secondes.', trains: [] };
+          if (!r.ok) return { _err: 'Transitous HTTP ' + r.status, trains: [] };
+          return r.json().then(parseMotisResponse);
+        })
+        .catch(function(e) {
+          var msg = e.name === 'AbortError'
+            ? 'Transitous ne répond pas (timeout ' + (TRANSITOUS_TIMEOUT_MS/1000) + 's) — service probablement surchargé.'
+            : 'Réseau : ' + e.message;
+          return { _err: msg, trains: [] };
+        });
+    }
+
+    // Première tentative
+    return doFetch().then(function(res) {
+      if (!res._overloaded) return res;
+      // Retry unique après 3 secondes si 5xx
+      return new Promise(function(resolve) { setTimeout(resolve, 3000); })
+        .then(doFetch)
+        .then(function(res2) {
+          if (res2._overloaded) {
+            return {
+              _err: 'Transitous est surchargé (HTTP ' + res2.status + '). ' +
+                    'C\'est un service communautaire à capacité limitée — réessayez dans quelques minutes.',
+              trains: []
+            };
+          }
+          return res2;
+        });
+    });
+  }
+
+  /* Convertit un timestamp Unix ms en "HH:MM" (heure locale) */
+  function tsToHHMM(ts) {
+    if (!ts) return '--:--';
+    var d = new Date(ts);
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  /* Convertit le mode MOTIS en libellé court */
+  function modeToLabel(mode) {
+    var m = (mode || '').toUpperCase();
+    if (m === 'RAIL' || m === 'HIGHSPEED_RAIL') return 'Train';
+    if (m === 'BUS' || m === 'COACH')           return 'Bus';
+    if (m === 'SUBWAY')                         return 'Métro';
+    if (m === 'TRAM')                           return 'Tram';
+    if (m === 'FERRY')                          return 'Ferry';
+    if (m === 'AIRPLANE')                       return 'Avion';
+    return 'Transport';
+  }
+
+  /* Fiabilité estimée selon le mode */
+  function modeToReliab(mode) {
+    var m = (mode || '').toUpperCase();
+    if (m === 'HIGHSPEED_RAIL') return 92;
+    if (m === 'RAIL')           return 87;
+    if (m === 'BUS')            return 82;
+    if (m === 'SUBWAY')         return 90;
+    if (m === 'TRAM')           return 88;
+    return 85;
   }
 
   /* ─── Score ──────────────────────────────────────── */
@@ -481,7 +547,7 @@
     modes.push({mode:'Voiture',icon:'🚗',duree:(rt&&rt.dur)||'—',cout:'~'+Math.round(dist*0.08)+'€',fib:78,co2kg:co2Car,co2:co2Car+' kg',score:62,note:'OSRM — sans trafic'});
     if (trains&&trains.trains&&trains.trains.length) {
       var t=trains.trains[0],co2t=+(1.7*dist/1000).toFixed(2);
-      modes.push({mode:'Train',icon:'🚆',duree:t.duree,cout:'~'+Math.round(Math.max(10,dist*0.1))+'€',fib:t.fiabilite,co2kg:co2t,co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',score:88,note:'API SNCF'});
+      modes.push({mode:'Train',icon:'🚆',duree:t.duree,cout:'~'+Math.round(Math.max(10,dist*0.1))+'€',fib:t.fiabilite,co2kg:co2t,co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',score:88,note:'Transitous (temps réel)'});
     } else if (dist>5) {
       var co2t2=+(1.7*dist/1000).toFixed(2);
       modes.push({mode:'Train',icon:'🚆',duree:fmtDur(Math.round(Math.max(20,dist*0.45))*60),cout:'~'+Math.round(Math.max(10,dist*0.1))+'€',fib:88,co2kg:co2t2,co2:co2t2<1?Math.round(co2t2*1000)+' g':co2t2.toFixed(1)+' kg',score:85,note:'Estimation'});
@@ -724,51 +790,76 @@
 
   function renderTrains() {
     var trains=DATA.trains, rt=DATA.rt, oName=DATA.oName, dName=DATA.dName;
-    var hasToken=!!STORE.token, off=dayOffset();
+    var off=dayOffset();
     var tH;
-    if (!trains||(!hasToken&&!trains.trains)) {
-      tH='<div class="train-notice"><div class="tn-icon">🔑</div>'+
-         '<div class="tn-ttl">Configurer l\'API SNCF</div>'+
-         '<div class="tn-txt">Gratuit · inscription sur numerique.sncf.com</div>'+
-         '<button class="navitia-goto-btn" id="go-settings-train">⚙ Configurer →</button></div>';
+
+    if (!trains) {
+      tH='<div class="ai"><span>⏳</span><span class="at">Chargement des trains…</span></div>';
     } else if (trains._err) {
-      tH='<div class="ai" style="margin-bottom:8px"><span>⚠️</span><span class="at">'+trains._err+'</span></div>'+
-         '<button class="navitia-goto-btn" id="go-settings-train">⚙ Vérifier le token</button>';
+      // Distinguer surcharge vs erreur réseau vraie
+      var isOverload = trains._err.indexOf('surchargé') >= 0 || trains._err.indexOf('timeout') >= 0 || trains._err.indexOf('limité') >= 0;
+      tH='<div class="ai" style="margin-bottom:6px">'+
+         '<span>'+(isOverload?'⏳':'⚠️')+'</span>'+
+         '<span class="at">'+trains._err+'</span></div>'+
+         (isOverload
+           ? '<div class="info-note">Transitous est un service communautaire bénévole à ressources limitées. '+
+             'Les 500/504 indiquent une surcharge temporaire — les données de trains seront disponibles dans quelques minutes.</div>'
+           : '<div class="info-note">En cas de panne persistante, consultez directement SNCF Connect.</div>');
     } else if (trains._empty) {
-      tH='<div class="ai"><span>ℹ️</span><span class="at">Aucun train direct trouvé. Consultez SNCF Connect.</span></div>';
-    } else if (trains.trains&&trains.trains.length) {
-      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">📅 Trains du '+dateLabel(selectedDate)+' à partir de 08h00</div>':'')+
+      tH='<div class="ai"><span>ℹ️</span><span class="at">Aucun trajet en transport commun trouvé'+
+         (off>0?' pour le '+dateLabel(selectedDate)+' à partir de 08h00':'')+
+         '. Cette liaison n\'est peut-être pas desservie par train direct.</span></div>';
+    } else if (trains.trains && trains.trains.length) {
+      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">📅 Trains du '+
+          dateLabel(selectedDate)+' à partir de 08h00</div>':'')+
         trains.trains.map(function(t,i){
-          return '<div class="tc"><span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
-            '<div><div class="ttime">'+t.depart+'</div><div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">Dép.</div></div>'+
-            '<div style="flex:1;text-align:center;color:var(--cyan);font-size:.8rem">──→<br><span style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t.duree+'</span></div>'+
-            '<div><div class="ttime">'+t.arrivee+'</div><div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">Arr.</div></div>'+
-            '<div class="tmeta"><span class="tnum">'+t.numero+'</span>'+
-            (t.transfers>0?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t.transfers+' corresp.</span>':
-             '<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">Direct</span>')+
+          return '<div class="tc">'+
+            '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
+            '<div><div class="ttime">'+t.depart+'</div>'+
+            '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">Dép.</div></div>'+
+            '<div style="flex:1;text-align:center;color:var(--cyan);font-size:.8rem">──→<br>'+
+            '<span style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t.duree+'</span></div>'+
+            '<div><div class="ttime">'+t.arrivee+'</div>'+
+            '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">Arr.</div></div>'+
+            '<div class="tmeta">'+
+            '<span class="tnum">'+t.numero+'</span>'+
+            (t.transfers>0
+              ?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t.transfers+' corresp.</span>'
+              :'<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">Direct</span>')+
             '<div style="display:flex;align-items:center;gap:3px;font-size:.62rem;font-family:var(--fm);color:var(--t2)">'+
-            '<div class="rb"><div class="rf" style="width:'+t.fiabilite+'%"></div></div>'+t.fiabilite+'%</div></div></div>';
+            '<div class="rb"><div class="rf" style="width:'+t.fiabilite+'%"></div></div>'+t.fiabilite+'%</div>'+
+            (t.realTime?'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">🟢 Temps réel</span>':'')+
+            '</div></div>';
         }).join('');
     } else {
-      tH='<div style="padding:8px;font-size:.75rem;color:var(--t3)">—</div>';
+      tH='<div style="padding:8px;font-size:.75rem;color:var(--t3)">Aucun résultat.</div>';
     }
+
     return (
-      '<div class="card"><div class="ch"><span class="ct">🚆 Trains '+oName+' → '+dName+'</span>'+
-      (hasToken?'<span class="src-tag">API SNCF</span>':'')+'</div><div class="cb">'+tH+'</div></div>'+
+      '<div class="card">'+
+      '<div class="ch"><span class="ct">🚆 Trains '+oName+' → '+dName+'</span>'+
+      '<span class="src-tag">Transitous · MOTIS 2</span></div>'+
+      '<div class="cb">'+tH+'</div></div>'+
+
       '<div class="card"><div class="ch"><span class="ct">📱 Ressources officielles</span></div><div class="cb">'+
-      [['SNCF Connect','https://www.sncf-connect.com','🎫 Billets & horaires'],
+      [['SNCF Connect','https://www.sncf-connect.com','🎫 Billets & horaires officiels'],
        ['Ouigo','https://www.ouigo.com','🟢 Trains low-cost'],
-       ['Trainline','https://www.thetrainline.com/fr','🔵 Comparateur'],
-       ['Vianavigo','https://www.vianavigo.com','🟣 Île-de-France'],
+       ['Trainline','https://www.thetrainline.com/fr','🔵 Comparateur de prix'],
+       ['Vianavigo','https://www.vianavigo.com','🟣 Île-de-France (RER, Transilien)'],
        ['RATP','https://www.ratp.fr','🔴 Paris & banlieue']
       ].map(function(l){
-        return '<div class="srow"><div style="flex:1"><div class="stxt">'+l[0]+'</div><div class="ssub2">'+l[2]+'</div></div>'+
-          '<a href="'+l[1]+'" target="_blank" style="font-size:.65rem;color:var(--blue);font-family:var(--fm);text-decoration:none;flex-shrink:0">Ouvrir →</a></div>';
+        return '<div class="srow"><div style="flex:1"><div class="stxt">'+l[0]+'</div>'+
+          '<div class="ssub2">'+l[2]+'</div></div>'+
+          '<a href="'+l[1]+'" target="_blank" style="font-size:.65rem;color:var(--blue);'+
+          'font-family:var(--fm);text-decoration:none;flex-shrink:0">Ouvrir →</a></div>';
       }).join('')+'</div></div>'+
-      (rt?'<div class="card"><div class="ch"><span class="ct">🚗 Alternative voiture</span><span class="src-tag">OSRM</span></div><div class="cb">'+
+
+      (rt?'<div class="card"><div class="ch"><span class="ct">🚗 Alternative voiture</span>'+
+       '<span class="src-tag">OSRM</span></div><div class="cb">'+
        '<div class="srow"><div class="d2 dg"></div><div style="flex:1">'+
        '<div class="stxt">'+rt.dist+' · '+rt.dur+'</div>'+
-       '<div class="ssub2">Durée théorique sans trafic</div></div></div></div></div>':'')
+       '<div class="ssub2">Durée théorique sans trafic (OSRM / OpenStreetMap)</div>'+
+       '</div></div></div></div>':'')
     );
   }
 
@@ -785,26 +876,9 @@
     }
   }
 
-  /* ─── Paramètres SNCF ─────────────────────────────── */
+  /* ─── Paramètres (page info Transitous) ─────────────── */
   function initSettings() {
-    var inp=$('sncf-token-input'); if(inp) inp.value=STORE.token;
     $('settings-back').addEventListener('click', function(){ show('search'); });
-    $('sncf-test-btn').addEventListener('click', function(){
-      var token=$('sncf-token-input').value.trim(), status=$('token-status');
-      status.textContent='Test en cours…'; status.className='token-status bb'; status.style.display='block';
-      testSNCFToken(token).then(function(res){
-        status.textContent=res.message; status.className='token-status '+(res.ok?'ok':'err');
-      });
-    });
-    $('sncf-save-btn').addEventListener('click', function(){
-      var token=$('sncf-token-input').value.trim();
-      STORE.token=token;
-      var badge=$('token-badge-search'); if(badge) badge.style.display=token?'inline-flex':'none';
-      var status=$('token-status');
-      status.textContent=token?'✓ Token enregistré':'Token supprimé';
-      status.className='token-status '+(token?'ok':'err'); status.style.display='block';
-      setTimeout(function(){ show('search'); }, 900);
-    });
   }
 
   /* ─── Analyse principale ──────────────────────────── */
@@ -846,9 +920,8 @@
           .catch(function(){ setStep('s4','fail'); ctx.rt=null; return ctx; });
       })
       .then(function(ctx){
-        var token=STORE.token;
-        if(!token) return Promise.resolve(ctx);
-        return fetchTrainsSNCF(ctx.oGeo.lat,ctx.oGeo.lon,ctx.dGeo.lat,ctx.dGeo.lon,token)
+        // Transitous : aucun token requis, appelé systématiquement
+        return fetchTrains(ctx.oGeo.lat,ctx.oGeo.lon,ctx.dGeo.lat,ctx.dGeo.lon)
           .then(function(trains){ ctx.trains=trains; return ctx; })
           .catch(function(e){ ctx.trains={_err:e.message,trains:[]}; return ctx; });
       })
@@ -907,21 +980,15 @@
     if(backBtn) backBtn.addEventListener('click', function(e){ e.preventDefault(); show('search'); });
 
     var settingsIcon=$('settings-icon');
-    if(settingsIcon) settingsIcon.addEventListener('click', function(){
-      var inp=$('sncf-token-input'); if(inp) inp.value=STORE.token; show('settings');
-    });
+    if(settingsIcon) settingsIcon.addEventListener('click', function(){ show('settings'); });
     var goSettings=$('go-settings');
-    if(goSettings) goSettings.addEventListener('click', function(){
-      var inp=$('sncf-token-input'); if(inp) inp.value=STORE.token; show('settings');
-    });
+    if(goSettings) goSettings.addEventListener('click', function(){ show('settings'); });
 
     $('analyze-btn').addEventListener('click', analyze);
     $('orig-inp').addEventListener('keydown', function(e){ if(e.key==='Enter') analyze(); });
     $('dest-inp').addEventListener('keydown', function(e){ if(e.key==='Enter') analyze(); });
 
     initSettings();
-
-    if(STORE.token){ var b=$('token-badge-search'); if(b) b.style.display='inline-flex'; }
   }
 
   if(document.readyState==='loading'){
