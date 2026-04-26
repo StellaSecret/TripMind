@@ -24,10 +24,11 @@
     return h > 0 ? h + 'h' + pad(m) : m + ' min';
   }
 
-  /* Convertit un objet Date en ISO 8601 pour MOTIS : "2024-06-12T08:00:00" */
+  /* Convertit un objet Date en ISO 8601 UTC pour MOTIS : "2024-06-12T08:00:00Z" */
   function toMotisDate(d) {
-    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-           'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':00';
+    // MOTIS requiert le suffixe Z (UTC) — sans lui : "failed to parse timestamp"
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) +
+           'T' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':00Z';
   }
 
   /* ─── Gestion de la date sélectionnée ─────────────── */
@@ -414,30 +415,77 @@
     return fetch(url, fetchOpts).finally(function() { if (timer) clearTimeout(timer); });
   }
 
-  /* Parse une réponse MOTIS et retourne { trains } ou { _empty } */
+  /* Convertit un string ISO 8601 UTC "2026-04-28T20:38:00Z" en "HH:MM" heure locale */
+  function isoToHHMM(iso) {
+    if (!iso) return '--:--';
+    var d = new Date(iso);
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  /* Parse une réponse MOTIS v1 (Transitous).
+   * Structure réelle confirmée par curl :
+   * {
+   *   requestParameters, debugOutput, from, to, direct,
+   *   itineraries: [{
+   *     duration,          ← secondes
+   *     startTime,         ← ISO 8601 UTC string "2026-04-28T20:35:00Z"
+   *     endTime,           ← ISO 8601 UTC string
+   *     transfers,         ← nombre de correspondances (déjà calculé)
+   *     legs: [{
+   *       mode,            ← "WALK", "SUBWAY", "RAIL", "BUS"…
+   *       startTime,       ← ISO 8601 UTC string
+   *       endTime,         ← ISO 8601 UTC string
+   *       duration,        ← secondes
+   *       headsign,        ← "La Défense (Grande Arche)"
+   *       realTime,        ← booléen
+   *       from: { name, departure, … }
+   *       to:   { name, arrival,  … }
+   *     }]
+   *   }]
+   * } */
   function parseMotisResponse(d) {
-    var itins = (d.plan && d.plan.itineraries) ? d.plan.itineraries : [];
+    var itins = d.itineraries;
+    if (!itins || !itins.length) return { _empty: true, trains: [] };
+
+    // Ne garder que les itinéraires avec au moins 1 leg non-WALK
     var ptItins = itins.filter(function(it) {
       return it.legs && it.legs.some(function(l) {
-        return l.mode !== 'WALK' && l.mode !== 'BICYCLE' && l.mode !== 'CAR';
+        var m = (l.mode || '').toUpperCase();
+        return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
       });
     }).slice(0, 3);
+
     if (!ptItins.length) return { _empty: true, trains: [] };
+
     var trains = ptItins.map(function(it) {
+      // Legs de transport public uniquement
       var ptLegs = it.legs.filter(function(l) {
-        return l.mode !== 'WALK' && l.mode !== 'BICYCLE';
+        var m = (l.mode || '').toUpperCase();
+        return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
       });
       var first = ptLegs[0] || {};
+
+      // Horaires depuis les strings ISO du leg (plus précis que l'itinéraire global)
+      var depart  = isoToHHMM(it.startTime);   // heure de départ de l'itinéraire complet
+      var arrivee = isoToHHMM(it.endTime);      // heure d'arrivée de l'itinéraire complet
+
+      // Libellé : mode + headsign du premier leg TP
+      var mode   = modeToLabel(first.mode || '');
+      var label  = first.headsign
+                   ? mode + ' → ' + first.headsign
+                   : mode;
+
       return {
-        depart:    tsToHHMM(it.startTime),
-        arrivee:   tsToHHMM(it.endTime),
-        duree:     fmtDur(Math.round(it.duration)),
-        numero:    modeToLabel(first.mode || '') + (first.routeShortName ? ' ' + first.routeShortName : first.headsign ? ' ' + first.headsign : ''),
-        transfers: Math.max(0, ptLegs.length - 1),
+        depart:    depart,
+        arrivee:   arrivee,
+        duree:     fmtDur(it.duration),
+        numero:    label,
+        transfers: it.transfers || Math.max(0, ptLegs.length - 1),
         fiabilite: modeToReliab(first.mode || ''),
         realTime:  ptLegs.some(function(l) { return l.realTime; })
       };
     });
+
     return { trains: trains };
   }
 
@@ -445,8 +493,9 @@
     var dt = new Date(selectedDate);
     if (dayOffset() > 0) { dt.setHours(8, 0, 0, 0); } else { dt = new Date(); }
 
-    var from = oLat + ',' + oLon + ',0';
-    var to   = dLat + ',' + dLon + ',0';
+    // Format coordonnées MOTIS 2 : "lat,lon" (sans level)
+    var from = oLat + ',' + oLon;
+    var to   = dLat + ',' + dLon;
     var url  = 'https://api.transitous.org/api/v1/plan?' +
       'fromPlace=' + encodeURIComponent(from) +
       '&toPlace='  + encodeURIComponent(to) +
@@ -496,14 +545,7 @@
     });
   }
 
-  /* Convertit un timestamp Unix ms en "HH:MM" (heure locale) */
-  function tsToHHMM(ts) {
-    if (!ts) return '--:--';
-    var d = new Date(ts);
-    return pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
-
-  /* Convertit le mode MOTIS en libellé court */
+  /* Convertit un mode MOTIS en libellé court */
   function modeToLabel(mode) {
     var m = (mode || '').toUpperCase();
     if (m === 'RAIL' || m === 'HIGHSPEED_RAIL') return 'Train';
