@@ -1,4 +1,4 @@
-name: Build TripMind APK
+name: Build TripMind (APK debug + AAB signé)
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 5 — Ajouter la plateforme Android si absente (premier build ou android/ non commité)
+      # 5 — Ajouter la plateforme Android si absente
       - name: Add Android platform
         run: |
           if [ ! -d "android" ]; then
@@ -50,13 +50,38 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # 8 — Build APK debug
-      - name: Build APK
+      # 8 — Décoder le keystore depuis le secret GitHub
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/tripmind-release.jks
+
+      # 9 — Build APK debug
+      - name: Build APK debug
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
 
-      # 9 — Créer une Release GitHub et attacher l'APK
+      # 10 — Build AAB release signé
+      - name: Build AAB release (signé)
+        env:
+          KEYSTORE_PATH: tripmind-release.jks
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew bundleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/android/app/$KEYSTORE_PATH" \
+            -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+
+      # 11 — Nettoyer le keystore du disque
+      - name: Cleanup keystore
+        if: always()
+        run: rm -f android/app/tripmind-release.jks
+
+      # 12 — Créer une Release GitHub et attacher l'APK + l'AAB
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -65,6 +90,11 @@ jobs:
           body: |
             ## TripMind — Build automatique #${{ github.run_number }}
 
+            | Artefact | Usage |
+            |---|---|
+            | `app-debug.apk` | Test direct sur appareil (sources inconnues) |
+            | `app-release.aab` | Publication Google Play Store |
+
             ### APIs intégrées
             - 🌤 Météo + UV : Open-Meteo (sans clé)
             - 💨 Qualité air + Pollen : Open-Meteo / Copernicus CAMS (sans clé)
@@ -72,8 +102,13 @@ jobs:
             - 🚗 Itinéraire routier : OSRM / OpenStreetMap (sans clé)
             - 🚆 Trains : Navitia (token optionnel — configurable dans l'app)
 
-            ### Installation
+            ### Installation APK (test)
             Téléchargez `app-debug.apk`, activez **Sources inconnues** sur votre Android, puis installez.
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+
+            ### Publication Play Store
+            Uploadez `app-release.aab` dans la Google Play Console.
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/bundle/release/app-release.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-package fr.tripmind.app;
+package com.stellasecret.tripmind;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -1,5 +1,5 @@
 {
-  "appId": "fr.tripmind.app",
+  "appId": "com.stellasecret.tripmind",
   "appName": "TripMind",
   "webDir": "www",
   "server": {

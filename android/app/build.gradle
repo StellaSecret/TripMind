@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "fr.tripmind.app"
+    namespace = "com.stellasecret.tripmind"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "fr.tripmind.app"
+        applicationId "com.stellasecret.tripmind"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -16,10 +16,30 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            // Les valeurs sont injectées par le workflow GitHub Actions via -P flags.
+            // Pour un build local, définissez-les dans android/local.properties :
+            //   STORE_FILE=chemin/vers/tripmind-release.jks
+            //   STORE_PASSWORD=...
+            //   KEY_ALIAS=...
+            //   KEY_PASSWORD=...
+            def props = new Properties()
+            def localPropsFile = rootProject.file("local.properties")
+            if (localPropsFile.exists()) {
+                props.load(new FileInputStream(localPropsFile))
+            }
+            storeFile     props.getProperty("STORE_FILE")     ? file(props.getProperty("STORE_FILE"))     : null
+            storePassword props.getProperty("STORE_PASSWORD") ?: ""
+            keyAlias      props.getProperty("KEY_ALIAS")      ?: ""
+            keyPassword   props.getProperty("KEY_PASSWORD")   ?: ""
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }
