@@ -1,4 +1,4 @@
-name: Build TripMind (APK debug + AAB signé)
+name: Build TripMind
 
 on:
   push:
@@ -6,109 +6,119 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ── JOB 1 : Build ─────────────────────────────────────
   build:
+    name: Build AAB (Play Store) + APK (sideload)
     runs-on: ubuntu-latest
 
     steps:
-      # 1 — Récupérer le code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2 — Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      # 3 — Java (requis par Gradle/Android)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
-      # 4 — Installer les dépendances npm
       - name: Install dependencies
         run: npm ci
 
-      # 5 — Ajouter la plateforme Android si absente
-      - name: Add Android platform
-        run: |
-          if [ ! -d "android" ]; then
-            echo "android/ absent, exécution de cap add android..."
-            npx cap add android
-          else
-            echo "android/ déjà présent."
-          fi
-
-      # 6 — Synchroniser Capacitor (copie www/ dans le projet Android)
       - name: Capacitor sync
         run: npx cap sync android
 
-      # 7 — Rendre gradlew exécutable
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # 8 — Décoder le keystore depuis le secret GitHub
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/tripmind-release.jks
 
-      # 9 — Build APK debug
-      - name: Build APK debug
+      - name: Set versionCode
         run: |
-          cd android
-          ./gradlew assembleDebug --no-daemon
+          sed -i "s/versionCode .*/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          echo "versionCode → ${{ github.run_number }}"
+          grep versionCode android/app/build.gradle
 
-      # 10 — Build AAB release signé
       - name: Build AAB release (signé)
         env:
-          KEYSTORE_PATH: tripmind-release.jks
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: |
           cd android
           ./gradlew bundleRelease --no-daemon \
-            -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/android/app/$KEYSTORE_PATH" \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/tripmind-release.jks \
             -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
-      # 11 — Nettoyer le keystore du disque
-      - name: Cleanup keystore
-        if: always()
-        run: rm -f android/app/tripmind-release.jks
+      - name: Build APK Release
+        env:
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/tripmind-release.jks \
+            -Pandroid.injected.signing.store.password="$STORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
 
-      # 12 — Créer une Release GitHub et attacher l'APK + l'AAB
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/bundle/release/app-release.aab \
+             dist/tripmind-${{ github.run_number }}.aab
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             dist/tripmind-${{ github.run_number }}.apk
+          cp android/app/build/outputs/mapping/release/mapping.txt \
+             dist/mapping-${{ github.run_number }}.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ github.run_number }} — versionCode ${{ github.run_number }}
+          path: dist/
+          retention-days: 1
+
+  # ── JOB 2 : Release ───────────────────────────────────
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: artifacts-${{ github.run_number }} — versionCode ${{ github.run_number }}
+          path: dist/
+
+      - name: List artifacts (debug)
+        run: ls -la dist/
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "TripMind build #${{ github.run_number }}"
           body: |
-            ## TripMind — Build automatique #${{ github.run_number }}
+            Build #${{ github.run_number }}
 
-            | Artefact | Usage |
-            |---|---|
-            | `app-debug.apk` | Test direct sur appareil (sources inconnues) |
-            | `app-release.aab` | Publication Google Play Store |
-
-            ### APIs intégrées
-            - 🌤 Météo + UV : Open-Meteo (sans clé)
-            - 💨 Qualité air + Pollen : Open-Meteo / Copernicus CAMS (sans clé)
-            - 📍 Géocodage : Base Adresse Nationale — data.gouv.fr (sans clé)
-            - 🚗 Itinéraire routier : OSRM / OpenStreetMap (sans clé)
-            - 🚆 Trains : Navitia (token optionnel — configurable dans l'app)
-
-            ### Installation APK (test)
-            Téléchargez `app-debug.apk`, activez **Sources inconnues** sur votre Android, puis installez.
-
-            ### Publication Play Store
-            Uploadez `app-release.aab` dans la Google Play Console.
+            📦 **tripmind-${{ github.run_number }}.aab** → Upload sur Play Store
+            📱 **tripmind-${{ github.run_number }}.apk** → Installation directe (tests)
           files: |
-            android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+            dist/tripmind-${{ github.run_number }}.aab
+            dist/tripmind-${{ github.run_number }}.apk
+            dist/mapping-${{ github.run_number }}.txt
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
