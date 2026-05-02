@@ -453,32 +453,81 @@
         var m = (l.mode || '').toUpperCase();
         return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
       });
-    }).slice(0, 3);
+    });
 
     if (!ptItins.length) return { _empty: true, trains: [] };
 
-    var trains = ptItins.map(function(it) {
-      // Legs de transport public uniquement
+    // Dédupliquer sur le premier leg TP (départ + arrivée + headsign).
+    // IT0/1/2 prennent le même REGIONAL_RAIL 06:15→07:11 mais Transitous
+    // ajoute des métros différents pour la fin du trajet → variantes inutiles.
+    // On garde l'itinéraire avec le moins de correspondances pour chaque
+    // "même premier train".
+    var firstLegMap = {}; // key → itinéraire retenu
+    ptItins.forEach(function(it) {
+      var ptLegsAll = it.legs.filter(function(l) {
+        var m = (l.mode || '').toUpperCase();
+        return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
+      });
+      if (!ptLegsAll.length) return;
+      var fl = ptLegsAll[0];
+      // Clé = mode + heure de départ du premier leg TP uniquement.
+      // L'endTime du premier leg peut varier selon la variante (arrêt intermédiaire différent).
+      var key = (fl.mode||'') + '|' + (fl.startTime||'');
+      var existing = firstLegMap[key];
+      if (!existing || (it.transfers||0) < (existing.transfers||0)) {
+        firstLegMap[key] = it;
+      }
+    });
+    var deduped = Object.values(firstLegMap)
+      // Re-trier par heure de départ du premier leg TP croissante
+      .sort(function(a, b) {
+        var aLegs = a.legs.filter(function(l){var m=(l.mode||'').toUpperCase();return m!=='WALK'&&m!=='BICYCLE'&&m!=='CAR';});
+        var bLegs = b.legs.filter(function(l){var m=(l.mode||'').toUpperCase();return m!=='WALK'&&m!=='BICYCLE'&&m!=='CAR';});
+        var at = aLegs.length ? aLegs[0].startTime : a.startTime;
+        var bt = bLegs.length ? bLegs[0].startTime : b.startTime;
+        return at < bt ? -1 : at > bt ? 1 : 0;
+      });
+
+    var trains = deduped.slice(0, 3).map(function(it) {
       var ptLegs = it.legs.filter(function(l) {
         var m = (l.mode || '').toUpperCase();
         return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
       });
       var first = ptLegs[0] || {};
+      var last  = ptLegs[ptLegs.length - 1] || {};
 
-      // Horaires depuis les strings ISO du leg (plus précis que l'itinéraire global)
-      var depart  = isoToHHMM(it.startTime);   // heure de départ de l'itinéraire complet
-      var arrivee = isoToHHMM(it.endTime);      // heure d'arrivée de l'itinéraire complet
+      /* Nettoyage du headsign
+       * Codes internes GTFS à rejeter : "VETO", "SARA", "860584", "TER01"…
+       * Règle : uniquement chiffres/majuscules/tirets, sans espace, ≤ 8 chars */
+      function isGtfsCode(s) {
+        return s.length >= 1 && s.length <= 8 && /^[A-Z0-9\-_]+$/.test(s);
+      }
 
-      // Libellé : mode + headsign du premier leg TP
-      var mode   = modeToLabel(first.mode || '');
-      var label  = first.headsign
-                   ? mode + ' → ' + first.headsign
-                   : mode;
+      var hs = first.headsign || '';
+      var hsClean = isGtfsCode(hs) ? '' : hs;
+
+      /* Si pas de headsign lisible, utiliser le nom de la gare d'arrivée
+       * du dernier leg TP (ex: "Paris Gare de Lyon") */
+      var destName = '';
+      if (!hsClean && last.to && last.to.name) {
+        var n = last.to.name;
+        // Exclure les noms génériques MOTIS
+        if (n !== 'END' && n !== 'START' && n.length > 1) destName = n;
+      }
+
+      var mode  = modeToLabel(first.mode || '');
+      var label = hsClean  ? mode + ' → ' + hsClean
+                : destName ? mode + ' → ' + destName
+                :            mode;
 
       return {
-        depart:    depart,
-        arrivee:   arrivee,
-        duree:     fmtDur(it.duration),
+        // Afficher l'heure du train en gare, pas l'heure de départ à pied
+        depart:    isoToHHMM(first.startTime || it.startTime),
+        arrivee:   isoToHHMM(last.endTime   || it.endTime),
+        // Durée = uniquement le temps en transport (sans marche initiale/finale)
+        duree:     fmtDur(ptLegs.reduce(function(acc, l) {
+                     return acc + (l.duration || 0);
+                   }, 0) + (it.transfers || 0) * 180), // +3 min par correspondance estimée
         numero:    label,
         transfers: it.transfers || Math.max(0, ptLegs.length - 1),
         fiabilite: modeToReliab(first.mode || ''),
@@ -548,7 +597,7 @@
   /* Convertit un mode MOTIS en libellé court */
   function modeToLabel(mode) {
     var m = (mode || '').toUpperCase();
-    if (m === 'RAIL' || m === 'HIGHSPEED_RAIL') return 'Train';
+    if (m === 'RAIL' || m === 'HIGHSPEED_RAIL' || m === 'REGIONAL_RAIL') return 'Train';
     if (m === 'BUS' || m === 'COACH')           return 'Bus';
     if (m === 'SUBWAY')                         return 'Métro';
     if (m === 'TRAM')                           return 'Tram';
@@ -585,24 +634,104 @@
   function calcModes(rt, trains) {
     var dist=(rt&&rt.distKm)||0, durSec=(rt&&rt.durSec)||0, modes=[];
     if (!dist) return modes;
-    var co2Car=Math.round(128*dist/1000);
-    modes.push({mode:'Voiture',icon:'🚗',duree:(rt&&rt.dur)||'—',cout:'~'+Math.round(dist*0.08)+'€',fib:78,co2kg:co2Car,co2:co2Car+' kg',score:62,note:'OSRM — sans trafic'});
-    if (trains&&trains.trains&&trains.trains.length) {
-      var t=trains.trains[0],co2t=+(1.7*dist/1000).toFixed(2);
-      modes.push({mode:'Train',icon:'🚆',duree:t.duree,cout:'~'+Math.round(Math.max(10,dist*0.1))+'€',fib:t.fiabilite,co2kg:co2t,co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',score:88,note:'Transitous (temps réel)'});
-    } else if (dist>5) {
-      var co2t2=+(1.7*dist/1000).toFixed(2);
-      modes.push({mode:'Train',icon:'🚆',duree:fmtDur(Math.round(Math.max(20,dist*0.45))*60),cout:'~'+Math.round(Math.max(10,dist*0.1))+'€',fib:88,co2kg:co2t2,co2:co2t2<1?Math.round(co2t2*1000)+' g':co2t2.toFixed(1)+' kg',score:85,note:'Estimation'});
+
+    /* ── Voiture : carburant + péages estimés ──────────────────────────
+     * Carburant : 7L/100km × 1.85€/L = 0.1295 €/km (essence)
+     * Péages    : réseau autoroutier français ≈ 0.09 €/km en moyenne
+     *             (source : ASFA 2024 — varie beaucoup selon l'axe)
+     * Total solo : ~0.22 €/km. On affiche les deux composantes séparément.
+     * Note : divisé par 4 passagers ≈ 0.055 €/km — mentionné dans l'UX.
+     * ─────────────────────────────────────────────────────────────────── */
+    var carburant = Math.round(dist * 0.13);  // 7L/100 × 1.85€
+    var peages    = dist > 80                 // péages significatifs > 80 km
+                    ? Math.round(dist * 0.09)
+                    : 0;
+    var coutCarSolo = carburant + peages;
+    var co2Car = Math.round(128 * dist / 1000);
+    var noteVoiture = peages > 0
+      ? 'Carb. ~' + carburant + '€ + péages ~' + peages + '€ (solo)'
+      : 'Carburant estimé (sans péages)';
+    modes.push({
+      mode:'Voiture', icon:'🚗', duree:(rt&&rt.dur)||'—',
+      cout:'~' + coutCarSolo + '€',
+      fib:78, co2kg:co2Car, co2:co2Car+' kg',
+      score:62, note:noteVoiture
+    });
+
+    /* ── Train ─────────────────────────────────────────────────────────
+     * Tarif TGV/Intercités : très variable (12€ Ouigo → 90€+).
+     * Estimation raisonnable : base 10€ + 0.12€/km, plafonné à 90€.
+     * Pour TER : ~0.08€/km.
+     * ─────────────────────────────────────────────────────────────────── */
+    if (trains && trains.trains && trains.trains.length) {
+      var t = trains.trains[0];
+      var co2t = +(1.7 * dist / 1000).toFixed(2);
+      // Distinguer TER (< 150 km) du TGV/Intercités
+      var coutTrain = dist < 150
+        ? Math.round(Math.max(8,  dist * 0.08))   // TER
+        : Math.round(Math.min(90, Math.max(25, dist * 0.12))); // TGV
+      modes.push({
+        mode:'Train', icon:'🚆', duree:t.duree,
+        cout:'~' + coutTrain + '€',
+        fib:t.fiabilite, co2kg:co2t,
+        co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',
+        score:88, note:'Transitous (temps réel)'
+      });
+    } else if (dist > 5) {
+      var co2t2 = +(1.7 * dist / 1000).toFixed(2);
+      var coutTrain2 = dist < 150
+        ? Math.round(Math.max(8,  dist * 0.08))
+        : Math.round(Math.min(90, Math.max(25, dist * 0.12)));
+      modes.push({
+        mode:'Train', icon:'🚆',
+        duree:fmtDur(Math.round(Math.max(20, dist * 0.45)) * 60),
+        cout:'~' + coutTrain2 + '€',
+        fib:88, co2kg:co2t2,
+        co2:co2t2<1?Math.round(co2t2*1000)+' g':co2t2.toFixed(1)+' kg',
+        score:85, note:'Durée & prix estimés'
+      });
     }
-    if (dist>15) {
-      var co2b=+(29*dist/1000).toFixed(1);
-      modes.push({mode:'Bus / Car',icon:'🚌',duree:fmtDur(Math.round(durSec*1.6)),cout:'~'+Math.max(5,Math.round(dist*0.04))+'€',fib:82,co2kg:+co2b,co2:co2b+' kg',score:65,note:'Estimation'});
-      var co2v=+(51*dist/1000).toFixed(1);
-      modes.push({mode:'Covoiturage',icon:'🚘',duree:fmtDur(Math.round(durSec*1.1)),cout:'~'+Math.round(dist*0.04+2)+'€',fib:72,co2kg:+co2v,co2:co2v+' kg',score:68,note:'Estimation'});
+
+    if (dist > 15) {
+      /* ── Bus / Car longue distance ──────────────────────────────────
+       * FlixBus, BlaBlaCar Bus : ~0.05€/km, min 5€
+       * ─────────────────────────────────────────────────────────────── */
+      var co2b = +(29 * dist / 1000).toFixed(1);
+      var coutBus = Math.round(Math.max(5, dist * 0.05));
+      modes.push({
+        mode:'Bus / Car', icon:'🚌',
+        duree:fmtDur(Math.round(durSec * 1.6)),
+        cout:'~' + coutBus + '€',
+        fib:82, co2kg:+co2b, co2:co2b+' kg',
+        score:65, note:'Estimation FlixBus / BlaBlaCar Bus'
+      });
+
+      /* ── Covoiturage ─────────────────────────────────────────────────
+       * BlaBlaCar : ~0.06€/km passager, min 5€
+       * ─────────────────────────────────────────────────────────────── */
+      var co2v = +(51 * dist / 1000).toFixed(1);
+      var coutCov = Math.round(Math.max(5, dist * 0.06));
+      modes.push({
+        mode:'Covoiturage', icon:'🚘',
+        duree:fmtDur(Math.round(durSec * 1.1)),
+        cout:'~' + coutCov + '€',
+        fib:72, co2kg:+co2v, co2:co2v+' kg',
+        score:68, note:'Estimation BlaBlaCar'
+      });
     }
-    if (dist<=20) modes.push({mode:'Vélo',icon:'🚲',duree:fmtDur(Math.round(dist*4*60)),cout:'0€',fib:95,co2kg:0,co2:'0',score:dist<=10?82:60,note:'~15 km/h moy.'});
-    var best=Math.max.apply(null,modes.map(function(m){return m.score;}));
-    var bm=modes.find(function(m){return m.score===best;}); if(bm) bm.best=true;
+
+    if (dist <= 20) {
+      modes.push({
+        mode:'Vélo', icon:'🚲',
+        duree:fmtDur(Math.round(dist * 4 * 60)),
+        cout:'0€', fib:95, co2kg:0, co2:'0',
+        score:dist <= 10 ? 82 : 60, note:'~15 km/h moy.'
+      });
+    }
+
+    var best = Math.max.apply(null, modes.map(function(m) { return m.score; }));
+    var bm = modes.find(function(m) { return m.score === best; });
+    if (bm) bm.best = true;
     return modes;
   }
 
