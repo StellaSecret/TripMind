@@ -1,0 +1,16 @@
+{
+  "name": "tripmind-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "npx --no playwright test",
+    "test:offline": "npx --no playwright test --grep-invert @live",
+    "test:live": "npx --no playwright test --grep @live",
+    "test:headed": "npx --no playwright test --headed",
+    "test:ui": "npx --no playwright test --ui",
+    "test:report": "npx --no playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}

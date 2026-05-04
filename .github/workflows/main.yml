@@ -1,0 +1,208 @@
+name: CI/CD TripMind
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  security-events: write
+  actions: read
+
+concurrency:
+  group: "pages-and-build"
+  cancel-in-progress: false
+
+jobs:
+  # ── SÉCURITÉ 1 : SCAN DE SECRETS ───────────────────────
+  scan-secrets:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+          head: ${{ github.sha }}
+          extra_args: --only-verified
+
+  # ── SÉCURITÉ 2 : ANALYSE STATIQUE (CODEQL) ─────────────
+  codeql-analysis:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+      - name: Perform Analysis
+        uses: github/codeql-action/analyze@v3
+
+  # ── SÉCURITÉ 3 : AUDIT NPM ─────────────────────────────
+  npm-security:
+    name: NPM Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install & Audit
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+  # ── TESTS NON-RÉGRESSION (Playwright) ──────────────────
+  playwright-tests:
+    name: Non-Regression Tests
+    needs: [scan-secrets, codeql-analysis, npm-security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Install Playwright inside e2e/ — fully isolated from app node_modules
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      # Serve www/ — use npx serve from app root (it's already a devDep via Capacitor)
+      - name: Serve app
+        run: |
+          npm ci
+          npx serve www --listen 3000 &
+          npx wait-on http://localhost:3000 --timeout 30000
+
+      # Offline suite: all tests NOT tagged @live
+      # Uses --grep-invert "@live" to skip real-API tests
+      - name: Run offline tests (Chromium)
+        working-directory: e2e
+        run: npx --no playwright test --grep-invert "@live" --project=chromium
+        env:
+          BASE_URL: http://localhost:3000
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}
+          path: e2e/playwright-report/
+          retention-days: 14
+
+  # ── DÉPLOIEMENT PAGES (Bloqué par les tests) ───────────
+  deploy-pages:
+    name: Deploy to GitHub Pages
+    needs: [playwright-tests]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./www
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ── BUILD ANDROID (Bloqué par les tests) ───────────────
+  build-android:
+    name: Build AAB & APK
+    needs: [playwright-tests]
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: artifacts-${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install & Sync
+        run: |
+          npm ci
+          npx cap sync android
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/tripmind-release.jks
+
+      - name: Build Android App
+        run: |
+          cd android
+          chmod +x gradlew
+          sed -i "s/versionCode .*/versionCode ${{ github.run_number }}/" app/build.gradle
+          ./gradlew bundleRelease assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/tripmind-release.jks \
+            -Pandroid.injected.signing.store.password="${{ secrets.STORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/bundle/release/app-release.aab dist/tripmind-${{ github.run_number }}.aab
+          cp android/app/build/outputs/apk/release/app-release.apk dist/tripmind-${{ github.run_number }}.apk
+          cp android/app/build/outputs/mapping/release/mapping.txt dist/mapping-${{ github.run_number }}.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ github.run_number }}
+          path: dist/
+          retention-days: 1
+
+  # ── RELEASE GITHUB (Attend le build) ───────────────────
+  release:
+    name: Create Release
+    needs: build-android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-android.outputs.artifact-name }}
+          path: dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "TripMind build #${{ github.run_number }}"
+          body: |
+            Build #${{ github.run_number }} (Qualité validée ✅)
+            📦 **tripmind-${{ github.run_number }}.aab** (Play Store)
+            📱 **tripmind-${{ github.run_number }}.apk** (Sideload)
+            🧪 [Rapport Playwright](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          files: |
+            dist/*.aab
+            dist/*.apk
+            dist/*.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
