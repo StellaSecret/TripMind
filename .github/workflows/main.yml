@@ -73,22 +73,22 @@ jobs:
         with:
           node-version: 22
 
-      # Install Playwright inside e2e/ — fully isolated from app node_modules
-      - name: Install Playwright
+      - name: Install Playwright (isolated in e2e/)
         working-directory: e2e
         run: |
           npm ci
           npx playwright install --with-deps chromium
 
-      # Serve www/ — use npx serve from app root (it's already a devDep via Capacitor)
-      - name: Serve app
+      # Install serve from app root, verify port responds before testing
+      - name: Serve app on port 3000
         run: |
           npm ci
           npx serve www --listen 3000 &
-          npx wait-on http://localhost:3000 --timeout 30000
+          echo "Waiting for app to be ready..."
+          timeout 30 bash -c 'until curl -sf http://localhost:3000 > /dev/null; do sleep 1; done'
+          echo "App is ready on port 3000"
 
-      # Offline suite: all tests NOT tagged @live
-      # Uses --grep-invert "@live" to skip real-API tests
+      # Run all tests NOT tagged @live (mocked, offline, deterministic)
       - name: Run offline tests (Chromium)
         working-directory: e2e
         run: npx --no playwright test --grep-invert "@live" --project=chromium
