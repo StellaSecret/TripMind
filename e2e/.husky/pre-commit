@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# e2e/.husky/pre-commit
+#
+# Checks that run locally before every commit.
+# Fast (<10s), no server needed, no Playwright.
+# Heavy checks (tests, CodeQL, audit) stay in GitHub Actions.
+
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+STAGED=$(git diff --cached --name-only)
+
+# ─────────────────────────────────────────────────────────────
+# 1. SECRET SCAN — block hardcoded tokens/keys before they land
+#    in git history (TruffleHog in CI is already too late)
+# ─────────────────────────────────────────────────────────────
+echo "🔍 [1/3] Scanning for secrets in staged files…"
+
+STAGED_SOURCE=$(echo "$STAGED" | grep -E '\.(js|ts|html|json|env)$' || true)
+
+if [ -n "$STAGED_SOURCE" ]; then
+  for file in $STAGED_SOURCE; do
+    [ -f "$ROOT/$file" ] || continue
+    # Hardcoded key=value assignments (apiKey = "abc123...")
+    if grep -qiE "(apikey|api_key|token|secret|password|passwd|credential)\s*[=:]\s*['\"][a-zA-Z0-9+/=_\-]{16,}" "$ROOT/$file" 2>/dev/null; then
+      echo ""
+      echo "❌ BLOCKED: Potential secret found in $file"
+      echo "   Use environment variables or GitHub Secrets instead."
+      echo "   False positive? Use: git commit --no-verify"
+      echo ""
+      exit 1
+    fi
+    # Known token prefixes (AWS, OpenAI, GitHub PAT, Google)
+    if grep -qE "(AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{32}|ghp_[a-zA-Z0-9]{36}|AIza[0-9A-Za-z_-]{35})" "$ROOT/$file" 2>/dev/null; then
+      echo ""
+      echo "❌ BLOCKED: Known secret pattern found in $file"
+      echo "   False positive? Use: git commit --no-verify"
+      echo ""
+      exit 1
+    fi
+  done
+fi
+echo "   ✓ No secrets detected"
+
+# ─────────────────────────────────────────────────────────────
+# 2. JS SYNTAX CHECK — catch broken JS before a 3-min CI run
+# ─────────────────────────────────────────────────────────────
+echo "🔧 [2/3] Checking JS syntax…"
+
+STAGED_JS=$(echo "$STAGED" | grep '^www/.*\.js$' || true)
+HAS_ERROR=0
+
+if [ -n "$STAGED_JS" ]; then
+  for file in $STAGED_JS; do
+    [ -f "$ROOT/$file" ] || continue
+    if ! node --check "$ROOT/$file" 2>&1; then
+      echo "❌ Syntax error in $file"
+      HAS_ERROR=1
+    fi
+  done
+fi
+
+if [ "$HAS_ERROR" -eq 1 ]; then
+  echo ""
+  echo "❌ BLOCKED: Fix JS syntax errors before committing."
+  exit 1
+fi
+echo "   ✓ JS syntax OK"
+
+# ─────────────────────────────────────────────────────────────
+# 3. TEST COVERAGE REMINDER — warn if www/js/ changed but
+#    e2e/tests/ not staged (warning only, does not block)
+# ─────────────────────────────────────────────────────────────
+echo "🧪 [3/3] Checking test coverage…"
+
+WWW_CHANGED=$(echo "$STAGED" | grep '^www/js/' || true)
+E2E_CHANGED=$(echo "$STAGED" | grep '^e2e/tests/' || true)
+
+if [ -n "$WWW_CHANGED" ] && [ -z "$E2E_CHANGED" ]; then
+  echo ""
+  echo "⚠️  WARNING: www/js/ modified but no e2e/tests/ files staged."
+  echo "   Changed: $(echo "$WWW_CHANGED" | tr '\n' ' ')"
+  echo "   Consider updating tests before pushing."
+  echo "   (Warning only — commit proceeds)"
+  echo ""
+else
+  echo "   ✓ Test files look up to date"
+fi
+
+echo ""
+echo "✅ Pre-commit checks passed."

@@ -4,13 +4,15 @@
   "private": true,
   "scripts": {
     "test": "npx --no playwright test",
-    "test:offline": "npx --no playwright test --grep-invert @live",
-    "test:live": "npx --no playwright test --grep @live",
+    "test:offline": "npx --no playwright test --grep-invert \"@live\"",
+    "test:live": "npx --no playwright test --grep \"@live\"",
     "test:headed": "npx --no playwright test --headed",
     "test:ui": "npx --no playwright test --ui",
-    "test:report": "npx --no playwright show-report"
+    "test:report": "npx --no playwright show-report",
+    "prepare": "cd .. && husky e2e/.husky"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "@playwright/test": "^1.60.0",
+    "husky": "^9.0.0"
   }
 }
