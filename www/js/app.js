@@ -173,13 +173,14 @@
       inp.classList.add('ac-open'); list.classList.add('visible');
       inp.setAttribute('aria-expanded', 'true');
       features.forEach(function(f, idx) {
-        var city = f.properties.city || f.properties.name || '';
-        var dept = (f.properties.context || '').split(',')[0] || '';
+        var label = f.properties.label || f.properties.name || '';
+        var city  = f.properties.city  || f.properties.name || '';
+        var dept  = (f.properties.context || '').split(',')[0] || '';
         var li = document.createElement('li');
         li.className = 'ac-item'; li.setAttribute('role', 'option');
-        li.innerHTML = '<span class="ac-pin">📍</span><span class="ac-city">' + city + '</span>' +
+        li.innerHTML = '<span class="ac-pin">📍</span><span class="ac-city">' + label + '</span>' +
           (dept ? '<span class="ac-dept">' + dept + '</span>' : '');
-        li.addEventListener('mousedown', function(e) { e.preventDefault(); fillInput(city); });
+        li.addEventListener('mousedown', function(e) { e.preventDefault(); fillInput(label); });
         list.appendChild(li);
       });
     }
@@ -194,7 +195,7 @@
       if (q.length < 2) { closeList(); return; }
       acTimers[inputId] = setTimeout(function() {
         fetch('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) +
-              '&type=municipality&limit=5&autocomplete=1')
+              '&type=housenumber&limit=7&autocomplete=1')
           .then(function(r) { return r.json(); })
           .then(function(d) { renderList(d.features || []); })
           .catch(function() { closeList(); });
@@ -207,7 +208,7 @@
       else if (e.key === 'ArrowUp') { e.preventDefault(); selectedIndex = Math.max(selectedIndex-1, 0); highlightItem(selectedIndex); }
       else if (e.key === 'Enter' && selectedIndex >= 0 && lastSuggestions[selectedIndex]) {
         e.preventDefault();
-        fillInput(lastSuggestions[selectedIndex].properties.city || lastSuggestions[selectedIndex].properties.name || '');
+        fillInput(lastSuggestions[selectedIndex].properties.label || lastSuggestions[selectedIndex].properties.name || '');
       } else if (e.key === 'Escape') { closeList(); }
     });
     inp.addEventListener('blur', function() { setTimeout(function() { closeList(); }, 200); });
@@ -219,13 +220,14 @@
   /* ─── API : Géocodage BAN ────────────────────────── */
   function geocodeBAN(city) {
     return fetch('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(city) +
-                 '&limit=1&type=municipality')
+                 '&limit=1')
       .then(function(r) { if (!r.ok) throw new Error('BAN HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         if (!d.features || !d.features.length) throw new Error('"' + city + '" introuvable en France');
         var f = d.features[0];
         return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
                  name: f.properties.city || f.properties.name,
+                 label: f.properties.label || f.properties.name,
                  dept: (f.properties.context || '').split(',')[0] };
       });
   }
@@ -1135,6 +1137,32 @@
 
     setupAutocomplete('orig-inp','orig-ac');
     setupAutocomplete('dest-inp','dest-ac');
+
+    /* ─── THÈME CLAIR / SOMBRE ────────────────────────── */
+    (function() {
+      var btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        var icon = t === 'light' ? '🌙' : '☀️';
+        var lbl  = t === 'light' ? 'Passer en mode sombre' : 'Passer en mode clair';
+        // Sync both toggle buttons (search screen + dashboard)
+        [document.getElementById('theme-toggle'), document.getElementById('theme-toggle-dash')]
+          .forEach(function(b) { if (b) { b.textContent = icon; b.setAttribute('aria-label', lbl); } });
+        try { localStorage.setItem('tripmind-theme', t); } catch(e) {}
+      }
+      var saved = 'dark';
+      try { saved = localStorage.getItem('tripmind-theme') || 'dark'; } catch(e) {}
+      applyTheme(saved);
+      btn.addEventListener('click', function() {
+        applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+      });
+      // Sync dashboard toggle button
+      var btn2 = document.getElementById('theme-toggle-dash');
+      if (btn2) btn2.addEventListener('click', function() {
+        applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+      });
+    })();
 
     document.querySelectorAll('.tab').forEach(function(t){
       t.addEventListener('click', function(){

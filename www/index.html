@@ -76,11 +76,14 @@
         <div class="err-box" id="ebox" role="alert"></div>
         <button class="main-btn" id="analyze-btn">Analyser le trajet →</button>
 
-        <div style="text-align:center;margin-top:10px">
+        <div style="text-align:center;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:12px">
           <button id="go-settings"
             style="background:none;border:none;color:var(--t3);font-size:.67rem;cursor:pointer;font-family:var(--fm)">
             ℹ À propos des sources de données
           </button>
+          <button id="theme-toggle"
+            style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"
+            aria-label="Passer en mode clair">☀️</button>
         </div>
       </div>
     </div>
@@ -169,6 +172,9 @@
         <span class="cpill" id="d-dest">—</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
+        <button id="theme-toggle-dash"
+          style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center"
+          aria-label="Basculer le thème">☀️</button>
         <button class="settings-btn" id="settings-icon" aria-label="Paramètres">⚙️</button>
         <button class="back-btn" id="back-btn">← Modifier</button>
       </div>

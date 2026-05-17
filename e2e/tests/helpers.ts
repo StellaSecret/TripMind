@@ -52,12 +52,43 @@ export async function clickTab(page: Page, name: string) {
 // ── Shared geocode mocks ──────────────────────────────────────────────────────
 
 function banParis(route: any) {
-  route.fulfill({ json: { features: [{ geometry: { coordinates: [2.3488, 48.8534] }, properties: { city: 'Paris', name: 'Paris', context: '75, Paris, Île-de-France' } }] } });
+  route.fulfill({ json: { features: [{ geometry: { coordinates: [2.3488, 48.8534] }, properties: { city: 'Paris', name: 'Paris', label: 'Paris (75)', context: '75, Paris, Île-de-France' } }] } });
 }
 function banLyon(route: any) {
-  route.fulfill({ json: { features: [{ geometry: { coordinates: [4.8357, 45.7640] }, properties: { city: 'Lyon', name: 'Lyon', context: '69, Rhône, Auvergne-Rhône-Alpes' } }] } });
+  route.fulfill({ json: { features: [{ geometry: { coordinates: [4.8357, 45.7640] }, properties: { city: 'Lyon', name: 'Lyon', label: 'Lyon (69)', context: '69, Rhône, Auvergne-Rhône-Alpes' } }] } });
 }
 const OSRM_462 = { routes: [{ distance: 462000, duration: 14400 }] };
+
+// ── Address-level BAN mocks (housenumber results) ────────────────────────────
+
+/** Simulates a full-address BAN response (e.g. "15 Rue de Rivoli, Paris") */
+export function banAddressMock(label: string, city: string, lat: number, lon: number) {
+  return (route: any) => route.fulfill({ json: { features: [{
+    geometry: { coordinates: [lon, lat] },
+    properties: {
+      label,
+      name: label.split(',')[0],
+      city,
+      context: '75, Paris, Île-de-France',
+      type: 'housenumber',
+      postcode: '75001',
+    }
+  }]}});
+}
+
+/** Simulates autocomplete suggestions for an address query */
+export function banAutocompleteMock(suggestions: Array<{ label: string, city: string, lat: number, lon: number }>) {
+  return (route: any) => route.fulfill({ json: { features: suggestions.map(s => ({
+    geometry: { coordinates: [s.lon, s.lat] },
+    properties: {
+      label: s.label,
+      name: s.label.split(',')[0],
+      city: s.city,
+      context: '75, Paris, Île-de-France',
+      type: 'housenumber',
+    }
+  }))}});
+}
 const TRAINS_EMPTY = { itineraries: [] };
 
 // ── Score scenario mocks ──────────────────────────────────────────────────────
