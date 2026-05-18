@@ -232,6 +232,24 @@
       });
   }
 
+  /* ─── API : Géocodage Transitous ────────────────────
+   * Utilisé uniquement pour les trains : retourne les coords
+   * de l'arrêt ferroviaire le plus proche, pas le centre-ville.
+   * Ex: "Étampes" → gare d'Étampes (pas Saint-Martin-d'Étampes).
+   ──────────────────────────────────────────────────── */
+  function geocodeTransitous(city) {
+    var url = 'https://api.transitous.org/api/v1/geocode?text=' +
+              encodeURIComponent(city) + '&size=5';
+    return fetch(url, { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind' } })
+      .then(function(r) { if (!r.ok) throw new Error('Transitous geocode HTTP ' + r.status); return r.json(); })
+      .then(function(d) {
+        if (!d || !d.length) throw new Error('"' + city + '" introuvable via Transitous');
+        var fr = d.find(function(r) { return r.country === 'FR'; });
+        if (!fr) throw new Error('"' + city + '" introuvable en France via Transitous');
+        return { lat: fr.lat, lon: fr.lon, name: fr.name };
+      });
+  }
+
   /* ─── API : Météo Open-Meteo ─────────────────────────
    * Récupère 16 jours de prévisions et extrait le jour voulu
    * via dayOffset().
@@ -523,9 +541,10 @@
                 :            mode;
 
       return {
-        // Afficher l'heure du train en gare, pas l'heure de départ à pied
-        depart:    isoToHHMM(first.startTime || it.startTime),
-        arrivee:   isoToHHMM(last.endTime   || it.endTime),
+        // from.departure / to.arrival = heure réelle en gare (scheduled stop time)
+        // first.startTime peut inclure un décalage de marche → on préfère from.departure
+        depart:    isoToHHMM((first.from && first.from.departure) || first.startTime || it.startTime),
+        arrivee:   isoToHHMM((last.to   && last.to.arrival)      || last.endTime    || it.endTime),
         // Durée = uniquement le temps en transport (sans marche initiale/finale)
         duree:     fmtDur(ptLegs.reduce(function(acc, l) {
                      return acc + (l.duration || 0);
@@ -1094,7 +1113,14 @@
       })
       .then(function(ctx){
         // Transitous : aucun token requis, appelé systématiquement
-        return fetchTrains(ctx.oGeo.lat,ctx.oGeo.lon,ctx.dGeo.lat,ctx.dGeo.lon)
+        // Utilise geocodeTransitous pour avoir les coords de la gare (pas le centre-ville BAN).
+        // En cas d'échec (réseau, mock de test), repli sur les coords BAN.
+        var tOrigP = geocodeTransitous(orig).catch(function() { return ctx.oGeo; });
+        var tDestP = geocodeTransitous(dest).catch(function() { return ctx.dGeo; });
+        return Promise.all([tOrigP, tDestP])
+          .then(function(tGeos) {
+            return fetchTrains(tGeos[0].lat,tGeos[0].lon,tGeos[1].lat,tGeos[1].lon);
+          })
           .then(function(trains){ ctx.trains=trains; return ctx; })
           .catch(function(e){ ctx.trains={_err:e.message,trains:[]}; return ctx; });
       })

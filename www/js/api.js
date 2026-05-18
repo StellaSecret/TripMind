@@ -62,13 +62,41 @@ function reliabilityByMode(m) {
  * @returns {{ lat, lon, name, dept, postcode }}
  */
 export async function geocodeBAN(city) {
-  const url = `https://api-adresse.data.gouv.fr/search/?` +
-              `q=${encodeURIComponent(city)}&limit=1&type=municipality`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`BAN HTTP ${r.status}`);
-  const d = await r.json();
-  if (!d.features?.length) throw new Error(`"${city}" introuvable en France`);
-  const f = d.features[0];
+  // Try to find the train station first ("gare de [city]") so that Transitous
+  // snaps to the correct stop. If nothing is found, fall back to the municipality
+  // centroid. Using the municipality centroid for cities like Étampes returns the
+  // town center which is closest to Saint-Martin-d'Étampes stop, not the gare.
+  async function fetchBAN(q, type) {
+    const url = `https://api-adresse.data.gouv.fr/search/?` +
+                `q=${encodeURIComponent(q)}&limit=1` + (type ? `&type=${type}` : '');
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`BAN HTTP ${r.status}`);
+    return r.json();
+  }
+
+  // 1st attempt: search "gare de <city>" as a street/address — returns the station building
+  const dGare = await fetchBAN(`gare de ${city}`);
+  if (dGare.features?.length) {
+    const f = dGare.features[0];
+    // Only accept if it's actually in the right city (avoid false matches)
+    const resultCity = (f.properties.city || f.properties.name || '').toLowerCase();
+    const searchCity = city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const resultCityN = resultCity.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (resultCityN.includes(searchCity) || searchCity.includes(resultCityN.split(' ')[0])) {
+      return {
+        lat:      f.geometry.coordinates[1],
+        lon:      f.geometry.coordinates[0],
+        name:     f.properties.city || f.properties.name,
+        dept:     f.properties.context || '',
+        postcode: f.properties.postcode || '',
+      };
+    }
+  }
+
+  // Fallback: municipality centroid
+  const dMunicipality = await fetchBAN(city, 'municipality');
+  if (!dMunicipality.features?.length) throw new Error(`"${city}" introuvable en France`);
+  const f = dMunicipality.features[0];
   return {
     lat:      f.geometry.coordinates[1],
     lon:      f.geometry.coordinates[0],
