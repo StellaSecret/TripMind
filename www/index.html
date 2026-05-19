@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" id="html-root">
 <head>
   <meta charset="UTF-8"/>
   <!-- viewport-fit=cover est REQUIS pour que env(safe-area-inset-*) fonctionne -->
@@ -25,24 +25,24 @@
         <div class="logo-ic">🧭</div>
         <div>
           <div class="logo-nm">TripMind</div>
-          <div class="logo-sub">France · APIs publiques</div>
+          <div class="logo-sub" id="logo-sub">France · APIs publiques</div>
         </div>
       </div>
 
       <div class="sc">
-        <div class="sc-ttl">🛰 Données temps réel — aucun token requis</div>
+        <div class="sc-ttl" id="pills-title">🛰 Données temps réel — aucun token requis</div>
         <div class="apis-strip">
-          <span class="api-pill">✓ Open-Meteo météo</span>
-          <span class="api-pill">✓ Open-Meteo AQI</span>
-          <span class="api-pill">✓ Open-Meteo pollen</span>
-          <span class="api-pill">✓ BAN géocodage</span>
-          <span class="api-pill">✓ OSRM trafic</span>
-          <span class="api-pill" style="background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.25);color:#06B6D4">✓ Transitous trains</span>
+          <span class="api-pill" id="pill0">✓ Open-Meteo météo</span>
+          <span class="api-pill" id="pill1">✓ Open-Meteo AQI</span>
+          <span class="api-pill" id="pill2">✓ Open-Meteo pollen</span>
+          <span class="api-pill" id="pill3">✓ BAN géocodage</span>
+          <span class="api-pill" id="pill4">✓ OSRM trafic</span>
+          <span class="api-pill" style="background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.25);color:#06B6D4" id="pill5">✓ Transitous trains</span>
         </div>
 
         <!-- Sélecteur de date -->
         <div class="date-section">
-          <label class="il">Date de départ</label>
+          <label class="il" id="date-section-label">Date de départ</label>
           <div class="date-scroll-wrap">
             <div class="date-chips" id="date-picker"></div>
           </div>
@@ -51,10 +51,10 @@
 
         <!-- Champ ORIGINE -->
         <div class="ig">
-          <label class="il" for="orig-inp">Ville de départ</label>
+          <label class="il" for="orig-inp" id="orig-label">Ville de départ</label>
           <span class="ii">📍</span>
           <input class="inf" id="orig-inp" type="text"
-                 placeholder="Ex: Paris, Lyon, Bordeaux…"
+                 placeholder="Ex: Paris, Lyon, Bordeaux…" id="orig-inp"
                  autocomplete="off" spellcheck="false"
                  aria-autocomplete="list" aria-controls="orig-ac" aria-expanded="false"/>
           <ul class="ac-list" id="orig-ac" role="listbox" aria-label="Suggestions de villes"></ul>
@@ -64,10 +64,10 @@
 
         <!-- Champ DESTINATION -->
         <div class="ig" style="margin-top:5px">
-          <label class="il" for="dest-inp">Ville de destination</label>
+          <label class="il" for="dest-inp" id="dest-label">Ville de destination</label>
           <span class="ii">🏁</span>
           <input class="inf" id="dest-inp" type="text"
-                 placeholder="Ex: Marseille, Nantes, Nice…"
+                 placeholder="Ex: Marseille, Nantes, Nice…" id="dest-inp"
                  autocomplete="off" spellcheck="false"
                  aria-autocomplete="list" aria-controls="dest-ac" aria-expanded="false"/>
           <ul class="ac-list" id="dest-ac" role="listbox" aria-label="Suggestions de villes"></ul>
@@ -81,6 +81,9 @@
             style="background:none;border:none;color:var(--t3);font-size:.67rem;cursor:pointer;font-family:var(--fm)">
             ℹ À propos des sources de données
           </button>
+          <button id="lang-toggle"
+            style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:0 8px;height:32px;font-size:.65rem;cursor:pointer;font-family:var(--fm);color:var(--t2);flex-shrink:0"
+            aria-label="Switch language">EN</button>
           <button id="theme-toggle"
             style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"
             aria-label="Passer en mode clair">☀️</button>
@@ -96,7 +99,7 @@
     <div class="settings-scr">
       <div class="settings-header">
         <button class="back-icon-btn" id="settings-back">← Retour</button>
-        <div class="settings-title">Sources de données</div>
+        <div class="settings-title" id="settings-title">Sources de données</div>
       </div>
 
       <!-- Transitous -->
@@ -105,21 +108,21 @@
           <div class="navitia-logo">🚆</div>
           <div>
             <div class="navitia-name">Transitous — Trains &amp; transports</div>
-            <div class="navitia-sub">Gratuit · Open source · Aucun token</div>
+            <div class="navitia-sub" id="transitous-subtitle">Gratuit · Open source · Aucun token</div>
           </div>
         </div>
         <div class="navitia-steps">
           <div class="navitia-step">
             <span class="step-num">✓</span>
-            Moteur <strong>MOTIS 2</strong> — couverture SNCF France via données GTFS ouvertes
+<span id="transitous-step1">Moteur <strong>MOTIS 2</strong> — couverture SNCF France via données GTFS ouvertes</span>
           </div>
           <div class="navitia-step">
             <span class="step-num">✓</span>
-            Données temps réel (retards, annulations) sur certaines lignes
+<span id="transitous-step2">Données temps réel (retards, annulations) sur certaines lignes</span>
           </div>
           <div class="navitia-step">
             <span class="step-num">✓</span>
-            Service communautaire FOSS — pas de compte requis
+<span id="transitous-step3">Service communautaire FOSS — pas de compte requis</span>
           </div>
         </div>
         <a class="navitia-link" href="https://transitous.org" target="_blank" style="background:linear-gradient(135deg,#0284c7,#06B6D4)">
@@ -129,16 +132,16 @@
 
       <!-- Toutes les APIs -->
       <div class="free-apis-card">
-        <div class="free-apis-title">Toutes les sources — 100% sans token</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo</strong> — météo complète + UV (16 jours)</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo AQ</strong> — AQI, PM2.5, PM10, NO₂, ozone (Copernicus CAMS)</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>Open-Meteo pollen</strong> — 5 espèces (modèle SILAM)</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>Base Adresse Nationale</strong> — géocodage + autocomplétion (data.gouv.fr)</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>OSRM / OpenStreetMap</strong> — itinéraire routier théorique</div>
-        <div class="free-api-row"><div class="free-api-dot"></div><strong>Transitous / MOTIS 2</strong> — trains et transports publics</div>
+        <div class="free-apis-title" id="free-apis-title">Toutes les sources — 100% sans token</div>
+        <div class="free-api-row" id="freeApi1"><div class="free-api-dot"></div><strong>Open-Meteo</strong> — météo complète + UV (16 jours)</div>
+        <div class="free-api-row" id="freeApi2"><div class="free-api-dot"></div><strong>Open-Meteo AQ</strong> — AQI, PM2.5, PM10, NO₂, ozone (Copernicus CAMS)</div>
+        <div class="free-api-row" id="freeApi3"><div class="free-api-dot"></div><strong>Open-Meteo pollen</strong> — 5 espèces (modèle SILAM)</div>
+        <div class="free-api-row" id="freeApi4"><div class="free-api-dot"></div><strong>Base Adresse Nationale</strong> — géocodage + autocomplétion (data.gouv.fr)</div>
+        <div class="free-api-row" id="freeApi5"><div class="free-api-dot"></div><strong>OSRM / OpenStreetMap</strong> — itinéraire routier théorique</div>
+        <div class="free-api-row" id="freeApi6"><div class="free-api-dot"></div><strong>Transitous / MOTIS 2</strong> — trains et transports publics</div>
         <div style="font-size:.65rem;color:var(--t3);margin-top:10px;line-height:1.6">
-          TripMind ne collecte aucune donnée personnelle.<br>
-          Aucun compte, aucun token, aucun tracking.
+          <span id="privacy-notice">TripMind ne collecte aucune donnée personnelle.<br>
+          Aucun compte, aucun token, aucun tracking.</span>
         </div>
       </div>
     </div>
@@ -190,17 +193,17 @@
       <div class="sci" id="score-circ"></div>
       <div style="flex:1">
         <div style="font-size:.92rem;font-weight:700;margin-bottom:2px" id="score-lbl">—</div>
-        <div style="font-size:.7rem;color:var(--t2)">Calculé sur météo, air et pollen</div>
+        <div style="font-size:.7rem;color:var(--t2)" id="score-subtitle">Calculé sur météo, air et pollen</div>
         <div style="font-size:.65rem;color:var(--t3);font-family:var(--fm);margin-top:5px" id="score-detail">—</div>
       </div>
     </div>
 
     <div class="stabs">
-      <div class="tab active" data-tab="overview">🗺 Aperçu</div>
-      <div class="tab" data-tab="route">🚗 Trajet</div>
-      <div class="tab" data-tab="air">💨 Air & Pollen</div>
-      <div class="tab" data-tab="sante">💊 Santé</div>
-      <div class="tab" data-tab="trains">🚆 Trains</div>
+      <div class="tab active" data-tab="overview" id="tab-overview">🗺 Aperçu</div>
+      <div class="tab" data-tab="route" id="tab-route">🚗 Trajet</div>
+      <div class="tab" data-tab="air" id="tab-air">💨 Air & Pollen</div>
+      <div class="tab" data-tab="sante" id="tab-sante">💊 Santé</div>
+      <div class="tab" data-tab="trains" id="tab-trains">🚆 Trains</div>
     </div>
 
     <div class="cards" id="tab-content"></div>

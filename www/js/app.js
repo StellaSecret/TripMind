@@ -14,6 +14,326 @@
 (function () {
   'use strict';
 
+  /* ─── Internationalisation (FR / EN) ─────────────────
+   * Auto-detected from navigator.language; can be forced
+   * by setting localStorage.setItem('tripmind-lang','en').
+   ──────────────────────────────────────────────────── */
+  var LANG = (function() {
+    try { var s = localStorage.getItem('tripmind-lang'); if (s) return s; } catch(e) {}
+    return (navigator.language || 'fr').startsWith('fr') ? 'fr' : 'en';
+  })();
+
+  var TRANSLATIONS = {
+    fr: {
+      /* Search screen */
+      logoSub: 'France · APIs publiques',
+      pillsTitle: '🛰 Données temps réel — aucun token requis',
+      pill0: '✓ Open-Meteo météo', pill1: '✓ Open-Meteo AQI', pill2: '✓ Open-Meteo pollen',
+      pill3: '✓ BAN géocodage', pill4: '✓ OSRM trafic', pill5: '✓ Transitous trains',
+      dateLabel: 'Date de départ',
+      origLabel: 'Ville de départ', origPlaceholder: 'Ex: Paris, Lyon, Bordeaux…',
+      destLabel: 'Ville de destination', destPlaceholder: 'Ex: Marseille, Nantes, Nice…',
+      swapAriaLabel: 'Inverser origine et destination',
+      analyzeBtn: 'Analyser le trajet →',
+      aboutSources: 'ℹ À propos des sources de données',
+      themeLight: 'Passer en mode clair', themeDark: 'Passer en mode sombre',
+      /* Settings */
+      settingsBack: '← Retour', settingsTitle: 'Sources de données',
+      transitousSubtitle: 'Gratuit · Open source · Aucun token',
+      transitousStep1: 'Moteur <strong>MOTIS 2</strong> — couverture SNCF France via données GTFS ouvertes',
+      transitousStep2: 'Données temps réel (retards, annulations) sur certaines lignes',
+      transitousStep3: 'Service communautaire FOSS — pas de compte requis',
+      freeApisTitle: 'Toutes les sources — 100% sans token',
+      freeApi1: '<strong>Open-Meteo</strong> — météo complète + UV (16 jours)',
+      freeApi2: '<strong>Open-Meteo AQ</strong> — AQI, PM2.5, PM10, NO₂, ozone (Copernicus CAMS)',
+      freeApi3: '<strong>Open-Meteo pollen</strong> — 5 espèces (modèle SILAM)',
+      freeApi4: '<strong>Base Adresse Nationale</strong> — géocodage + autocomplétion (data.gouv.fr)',
+      freeApi5: '<strong>OSRM / OpenStreetMap</strong> — itinéraire routier théorique',
+      freeApi6: '<strong>Transitous / MOTIS 2</strong> — trains et transports publics',
+      privacyNotice: 'TripMind ne collecte aucune donnée personnelle.<br>Aucun compte, aucun token, aucun tracking.',
+      /* Loading */
+      loadingInit: 'Initialisation…',
+      loadingGeocode: 'Géocodage des villes…',
+      loadingMeteo: 'Récupération météo…',
+      loadingAir: "Qualité de l'air & pollen…",
+      loadingRoute: 'Calcul itinéraire…',
+      step0: 'Géocodage BAN (data.gouv.fr)',
+      step1: 'Météo + UV · Open-Meteo',
+      step2: "Qualité de l'air · Copernicus CAMS",
+      step3: 'Pollen · Open-Meteo SILAM',
+      step4: 'Itinéraire routier · OSRM',
+      /* Dashboard */
+      backBtn: '← Modifier', dashDateToday: "Aujourd'hui",
+      tabOverview: '🗺 Aperçu', tabRoute: '🚗 Trajet', tabAir: '💨 Air & Pollen',
+      tabSante: '💊 Santé', tabTrains: '🚆 Trains',
+      scoreSubtitle: 'Calculé sur météo, air et pollen',
+      /* Date chips */
+      chipToday: 'Auj.', chipTomorrow: 'Dem.',
+      dateToday: "Aujourd'hui", dateTomorrow: 'Demain',
+      /* Score labels */
+      scoreBon: 'Bonnes conditions', scoreMoyen: 'Conditions moyennes', scoreDeg: 'Conditions dégradées',
+      /* Weather */
+      wmoCode0: 'Ciel dégagé', wmoCode1: 'Légèrement nuageux', wmoCode3: 'Couvert',
+      wmoCode45: 'Brumeux', wmoCode51: 'Bruine', wmoCode61: 'Pluie',
+      wmoCode71: 'Neige', wmoCode80: 'Averses', wmoCode95: 'Orageux',
+      windMax: 'Vent max', precip: 'Précip.', humidity: 'Humidité', clouds: 'Nuages',
+      feelsLike: 'Ressenti ', feelsEst: 'Ressenti estimé ',
+      minMax: 'min / max',
+      /* UV */
+      uvFaible: 'Faible', uvModere: 'Modéré', uvEleve: 'Élevé', uvTresEleve: 'Très élevé', uvExtreme: 'Extrême',
+      /* AQI */
+      aqiTresBon: 'Très bon', aqiBon: 'Bon', aqiSat: 'Satisfaisant', aqiMed: 'Médiocre',
+      aqiMauvais: 'Mauvais', aqiTresMauvais: 'Très mauvais',
+      aqiLabel: 'Indice AQI européen', aqiCurrent: ' · Actuel', aqiForecast: ' · Prévision',
+      /* Pollen */
+      pollenFaible: 'Faible', pollenModere: 'Modéré', pollenEleve: 'Élevé', pollenTresEleve: 'Très élevé',
+      pollenNA: 'Données indisponibles', pollenNone: '✓ Aucun pollen significatif',
+      pollenUnit: 'grain/m³ max',
+      pollenNames: { Aulne: 'Aulne', Bouleau: 'Bouleau', Graminées: 'Graminées', Armoise: 'Armoise', Olivier: 'Olivier' },
+      /* Route */
+      routeCard: 'Itinéraire routier', routeEstim: ' estimé hors trafic',
+      routeNote: 'Durée théorique sans trafic (OSRM / OpenStreetMap)',
+      routeNA: 'Données routières indisponibles',
+      multiMode: 'Comparaison multi-modes',
+      durLabel: '⏱ Durée', costLabel: '💶 Coût', co2Label: '🌍 CO₂',
+      /* Mode labels */
+      modeCar: 'Voiture', modeTrain: 'Train', modeBus: 'Bus / Car',
+      modeCarpool: 'Covoiturage', modeBike: 'Vélo', modeSubway: 'Métro',
+      modeTram: 'Tram', modeFerry: 'Ferry', modePlane: 'Avion', modeTransit: 'Transport',
+      /* Mode notes */
+      carFuelOnly: 'Carburant estimé (sans péages)',
+      carFuelToll: function(carb, peage) { return 'Carb. ~'+carb+'€ + péages ~'+peage+'€ (solo)'; },
+      trainRealtime: 'Transitous (temps réel)',
+      trainEstim: 'Durée & prix estimés',
+      busEstim: 'Estimation FlixBus / BlaBlaCar Bus',
+      carpoolEstim: 'Estimation BlaBlaCar',
+      bikeSpeed: '~15 km/h moy.',
+      /* Trains tab */
+      trainsLoading: 'Chargement des trains…',
+      trainsOverloadNote: 'Transitous est un service communautaire bénévole à ressources limitées. Les 500/504 indiquent une surcharge temporaire — les données de trains seront disponibles dans quelques minutes.',
+      trainsErrNote: 'En cas de panne persistante, consultez directement SNCF Connect.',
+      trainsEmpty: function(off, label) { return 'Aucun trajet en transport commun trouvé'+(off>0?' pour le '+label+' à partir de 08h00':'')+". Cette liaison n'est peut-être pas desservie par train direct."; },
+      trainsFuture: function(label) { return '📅 Trains du '+label+' à partir de 08h00'; },
+      trainsDep: 'Dép.', trainsArr: 'Arr.',
+      trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' corresp.'; },
+      trainsRealtime: '🟢 Temps réel',
+      trainsOfficialTitle: '📱 Ressources officielles',
+      trainsCarAlt: '🚗 Alternative voiture',
+      trainsCarNote: 'Durée théorique sans trafic (OSRM / OpenStreetMap)',
+      trainsLinks: [
+        ['SNCF Connect','https://www.sncf-connect.com','🎫 Billets & horaires officiels'],
+        ['Ouigo','https://www.ouigo.com','🟢 Trains low-cost'],
+        ['Trainline','https://www.thetrainline.com/fr','🔵 Comparateur de prix'],
+        ['Vianavigo','https://www.vianavigo.com','🟣 Île-de-France (RER, Transilien)'],
+        ['RATP','https://www.ratp.fr','🔴 Paris & banlieue']
+      ],
+      trainsOpenLink: 'Ouvrir →',
+      /* Health */
+      santeTitle: '🏥 Santé', santeReco: '💊 Recommandations',
+      pollenLabel: 'Pollen', masqueLabel: 'Masque', uvLabel: 'UV',
+      actExtLabel: 'Activité ext.', airQualLabel: 'Qualité air', tempLabel: 'Température',
+      masqueYes: 'Recommandé', masqueNo: 'Non nécessaire',
+      actFav: 'Favorable', actDec: 'Déconseillée', actAcc: 'Acceptable',
+      /* Recommendations */
+      recoPollenHigh: function(v) { return 'Pollen très élevé ('+v+' gr/m³) — antihistaminiques fortement conseillés'; },
+      recoPollenMed: 'Pollen élevé — prenez vos antihistaminiques',
+      recoPollenLow: function(s) { return 'Pollen modéré ('+s+')'; },
+      recoAqiBad: function(v) { return 'Qualité air mauvaise (AQI '+v+') — masque FFP2 recommandé'; },
+      recoAqiMed: function(v) { return "Qualité air médiocre (AQI "+v+") — limitez l'effort"; },
+      recoStorm: 'Orage prévu — reportez si possible',
+      recoRainHeavy: 'Averses fortes — imperméable recommandé',
+      recoRain: 'Pluie — pensez à votre imperméable',
+      recoFrost: function(t) { return 'Gel possible ('+t+'°C) — vigilance verglas'; },
+      recoHeat: function(t) { return 'Canicule ('+t+'°C) — hydratez-vous, évitez 12h–16h'; },
+      recoUvHigh: function(u) { return 'UV très élevé ('+u+') — protection 50+ indispensable'; },
+      recoUvMed: function(u) { return 'UV élevé ('+u+') — SPF 30+ conseillé'; },
+      recoForecast: function(n) { return 'Prévision J+'+n+' — données météo estimées, susceptibles d\'évoluer'; },
+      recoCarNote: function(dur, dist) { return 'Voiture : '+dur+' pour '+dist+'.'; },
+      recoTrainNote: 'Consultez SNCF Connect ou Vianavigo pour les horaires de trains',
+      recoNA: 'Données routières indisponibles.',
+      recoGood: 'Conditions généralement favorables pour ce trajet.',
+      recoTitle: 'Conditions de trajet',
+      recoInfoTitle: 'Infos',
+      /* Overview */
+      meteoAt: '🌤 Météo à ',
+      airQualityTitle: '💨 Qualité de l\'air',
+      recoCardTitle: '💡 Recommandations',
+      aqiNoData: function(d) { return '⏱ Données AQI non disponibles pour J+'+d+' (portée max ~5 jours).'; },
+      /* Air tab */
+      pollenTabTitle: '🌿 Pollen',
+      airTabTitle: '💨 Qualité air & polluants',
+      airNoData: function(d) { return "⏱ Open-Meteo ne fournit les prévisions de pollen et de qualité de l'air que sur ~5 jours. Pour J+"+d+", les données ne sont pas encore disponibles."; },
+      airPollNA: '⏱ Données de polluants non disponibles pour ce jour.',
+      pm25: 'Particules fines', pm10: 'Particules grossières',
+      no2: "Dioxyde d'azote", ozone: 'Ozone troposphérique',
+      pollutantsNA: 'Données polluants indisponibles',
+      /* Score */
+      scoreDetail: function(s) { return 'Score '+s+'/100 · météo + air + pollen'; },
+      /* Error */
+      errUnexpected: 'Erreur inattendue. Vérifiez votre connexion.',
+      /* Forecast badge */
+      forecastBadge: function(n) { return '📅 Prévision J+'+n; },
+      /* Language toggle */
+      langToggleLabel: 'Switch to English',
+    },
+    en: {
+      /* Search screen */
+      logoSub: 'France · Public APIs',
+      pillsTitle: '🛰 Real-time data — no token required',
+      pill0: '✓ Open-Meteo weather', pill1: '✓ Open-Meteo AQI', pill2: '✓ Open-Meteo pollen',
+      pill3: '✓ BAN geocoding', pill4: '✓ OSRM routing', pill5: '✓ Transitous trains',
+      dateLabel: 'Departure date',
+      origLabel: 'Origin city', origPlaceholder: 'E.g. Paris, Lyon, Bordeaux…',
+      destLabel: 'Destination city', destPlaceholder: 'E.g. Marseille, Nantes, Nice…',
+      swapAriaLabel: 'Swap origin and destination',
+      analyzeBtn: 'Analyze trip →',
+      aboutSources: 'ℹ About data sources',
+      themeLight: 'Switch to light mode', themeDark: 'Switch to dark mode',
+      /* Settings */
+      settingsBack: '← Back', settingsTitle: 'Data sources',
+      transitousSubtitle: 'Free · Open source · No token',
+      transitousStep1: 'Engine <strong>MOTIS 2</strong> — SNCF France coverage via open GTFS data',
+      transitousStep2: 'Real-time data (delays, cancellations) on select lines',
+      transitousStep3: 'FOSS community service — no account required',
+      freeApisTitle: 'All sources — 100% token-free',
+      freeApi1: '<strong>Open-Meteo</strong> — full weather + UV (16 days)',
+      freeApi2: '<strong>Open-Meteo AQ</strong> — AQI, PM2.5, PM10, NO₂, ozone (Copernicus CAMS)',
+      freeApi3: '<strong>Open-Meteo pollen</strong> — 5 species (SILAM model)',
+      freeApi4: '<strong>Base Adresse Nationale</strong> — geocoding + autocomplete (data.gouv.fr)',
+      freeApi5: '<strong>OSRM / OpenStreetMap</strong> — theoretical road route',
+      freeApi6: '<strong>Transitous / MOTIS 2</strong> — trains and public transport',
+      privacyNotice: 'TripMind collects no personal data.<br>No account, no token, no tracking.',
+      /* Loading */
+      loadingInit: 'Initialising…',
+      loadingGeocode: 'Geocoding cities…',
+      loadingMeteo: 'Fetching weather…',
+      loadingAir: 'Air quality & pollen…',
+      loadingRoute: 'Computing route…',
+      step0: 'Geocoding BAN (data.gouv.fr)',
+      step1: 'Weather + UV · Open-Meteo',
+      step2: 'Air quality · Copernicus CAMS',
+      step3: 'Pollen · Open-Meteo SILAM',
+      step4: 'Road route · OSRM',
+      /* Dashboard */
+      backBtn: '← Edit', dashDateToday: 'Today',
+      tabOverview: '🗺 Overview', tabRoute: '🚗 Journey', tabAir: '💨 Air & Pollen',
+      tabSante: '💊 Health', tabTrains: '🚆 Trains',
+      scoreSubtitle: 'Based on weather, air & pollen',
+      /* Date chips */
+      chipToday: 'Today', chipTomorrow: 'Tom.',
+      dateToday: 'Today', dateTomorrow: 'Tomorrow',
+      /* Score labels */
+      scoreBon: 'Good conditions', scoreMoyen: 'Average conditions', scoreDeg: 'Poor conditions',
+      /* Weather */
+      wmoCode0: 'Clear sky', wmoCode1: 'Partly cloudy', wmoCode3: 'Overcast',
+      wmoCode45: 'Foggy', wmoCode51: 'Drizzle', wmoCode61: 'Rain',
+      wmoCode71: 'Snow', wmoCode80: 'Showers', wmoCode95: 'Thunderstorm',
+      windMax: 'Max wind', precip: 'Precip.', humidity: 'Humidity', clouds: 'Clouds',
+      feelsLike: 'Feels like ', feelsEst: 'Est. feels ',
+      minMax: 'min / max',
+      /* UV */
+      uvFaible: 'Low', uvModere: 'Moderate', uvEleve: 'High', uvTresEleve: 'Very high', uvExtreme: 'Extreme',
+      /* AQI */
+      aqiTresBon: 'Very good', aqiBon: 'Good', aqiSat: 'Fair', aqiMed: 'Moderate',
+      aqiMauvais: 'Poor', aqiTresMauvais: 'Very poor',
+      aqiLabel: 'European AQI index', aqiCurrent: ' · Current', aqiForecast: ' · Forecast',
+      /* Pollen */
+      pollenFaible: 'Low', pollenModere: 'Moderate', pollenEleve: 'High', pollenTresEleve: 'Very high',
+      pollenNA: 'Data unavailable', pollenNone: '✓ No significant pollen',
+      pollenUnit: 'grain/m³ max',
+      pollenNames: { Aulne: 'Alder', Bouleau: 'Birch', Graminées: 'Grass', Armoise: 'Mugwort', Olivier: 'Olive' },
+      /* Route */
+      routeCard: 'Road route', routeEstim: ' estimated without traffic',
+      routeNote: 'Theoretical duration without traffic (OSRM / OpenStreetMap)',
+      routeNA: 'Road data unavailable',
+      multiMode: 'Multi-mode comparison',
+      durLabel: '⏱ Duration', costLabel: '💶 Cost', co2Label: '🌍 CO₂',
+      /* Mode labels */
+      modeCar: 'Car', modeTrain: 'Train', modeBus: 'Bus / Coach',
+      modeCarpool: 'Carpool', modeBike: 'Bike', modeSubway: 'Metro',
+      modeTram: 'Tram', modeFerry: 'Ferry', modePlane: 'Plane', modeTransit: 'Transit',
+      /* Mode notes */
+      carFuelOnly: 'Est. fuel (no tolls)',
+      carFuelToll: function(carb, peage) { return 'Fuel ~€'+carb+' + tolls ~€'+peage+' (solo)'; },
+      trainRealtime: 'Transitous (real-time)',
+      trainEstim: 'Est. duration & price',
+      busEstim: 'Est. FlixBus / BlaBlaCar Bus',
+      carpoolEstim: 'Est. BlaBlaCar',
+      bikeSpeed: '~15 km/h avg.',
+      /* Trains tab */
+      trainsLoading: 'Loading trains…',
+      trainsOverloadNote: 'Transitous is a volunteer community service with limited resources. 500/504 errors indicate temporary overload — train data will be available in a few minutes.',
+      trainsErrNote: 'If the issue persists, check SNCF Connect directly.',
+      trainsEmpty: function(off, label) { return 'No public transport connection found'+(off>0?' for '+label+' from 08:00':'')+'. This route may not be served by a direct train.'; },
+      trainsFuture: function(label) { return '📅 Trains on '+label+' from 08:00'; },
+      trainsDep: 'Dep.', trainsArr: 'Arr.',
+      trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' change'+(n>1?'s':''); },
+      trainsRealtime: '🟢 Real-time',
+      trainsOfficialTitle: '📱 Official resources',
+      trainsCarAlt: '🚗 Car alternative',
+      trainsCarNote: 'Theoretical duration without traffic (OSRM / OpenStreetMap)',
+      trainsLinks: [
+        ['SNCF Connect','https://www.sncf-connect.com','🎫 Official tickets & timetables'],
+        ['Ouigo','https://www.ouigo.com','🟢 Budget trains'],
+        ['Trainline','https://www.thetrainline.com','🔵 Price comparison'],
+        ['Vianavigo','https://www.vianavigo.com','🟣 Île-de-France (RER, Transilien)'],
+        ['RATP','https://www.ratp.fr','🔴 Paris & suburbs']
+      ],
+      trainsOpenLink: 'Open →',
+      /* Health */
+      santeTitle: '🏥 Health', santeReco: '💊 Recommendations',
+      pollenLabel: 'Pollen', masqueLabel: 'Mask', uvLabel: 'UV',
+      actExtLabel: 'Outdoor act.', airQualLabel: 'Air quality', tempLabel: 'Temperature',
+      masqueYes: 'Recommended', masqueNo: 'Not needed',
+      actFav: 'Favourable', actDec: 'Not advised', actAcc: 'Acceptable',
+      /* Recommendations */
+      recoPollenHigh: function(v) { return 'Very high pollen ('+v+' gr/m³) — antihistamines strongly advised'; },
+      recoPollenMed: 'High pollen — take your antihistamines',
+      recoPollenLow: function(s) { return 'Moderate pollen ('+s+')'; },
+      recoAqiBad: function(v) { return 'Poor air quality (AQI '+v+') — FFP2 mask recommended outdoors'; },
+      recoAqiMed: function(v) { return 'Moderate air quality (AQI '+v+') — avoid intense outdoor effort'; },
+      recoStorm: 'Thunderstorm forecast — postpone if possible',
+      recoRainHeavy: 'Heavy showers — waterproof jacket recommended',
+      recoRain: 'Rain forecast — bring a raincoat',
+      recoFrost: function(t) { return 'Frost risk ('+t+'°C) — beware of ice'; },
+      recoHeat: function(t) { return 'Heatwave ('+t+'°C) — stay hydrated, avoid 12–16h'; },
+      recoUvHigh: function(u) { return 'Very high UV ('+u+') — SPF 50+ essential'; },
+      recoUvMed: function(u) { return 'High UV ('+u+') — SPF 30+ advised'; },
+      recoForecast: function(n) { return 'Forecast J+'+n+' — estimated weather, subject to change'; },
+      recoCarNote: function(dur, dist) { return 'Car: '+dur+' for '+dist+'.'; },
+      recoTrainNote: 'Check SNCF Connect or Vianavigo for train timetables',
+      recoNA: 'Road data unavailable.',
+      recoGood: 'Generally favourable conditions for this trip.',
+      recoTitle: 'Trip conditions',
+      recoInfoTitle: 'Info',
+      /* Overview */
+      meteoAt: '🌤 Weather in ',
+      airQualityTitle: '💨 Air quality',
+      recoCardTitle: '💡 Recommendations',
+      aqiNoData: function(d) { return '⏱ AQI data unavailable for J+'+d+' (max range ~5 days).'; },
+      /* Air tab */
+      pollenTabTitle: '🌿 Pollen',
+      airTabTitle: '💨 Air quality & pollutants',
+      airNoData: function(d) { return '⏱ Open-Meteo only provides pollen and air quality forecasts for ~5 days. Data for J+'+d+' is not yet available.'; },
+      airPollNA: '⏱ Pollutant data unavailable for this day.',
+      pm25: 'Fine particles', pm10: 'Coarse particles',
+      no2: 'Nitrogen dioxide', ozone: 'Tropospheric ozone',
+      pollutantsNA: 'Pollutant data unavailable',
+      /* Score */
+      scoreDetail: function(s) { return 'Score '+s+'/100 · weather + air + pollen'; },
+      /* Error */
+      errUnexpected: 'Unexpected error. Check your connection.',
+      /* Forecast badge */
+      forecastBadge: function(n) { return '📅 Forecast J+'+n; },
+      /* Language toggle */
+      langToggleLabel: 'Passer en français',
+    }
+  };
+
+  /* Shorthand */
+  function t(key) { return (TRANSLATIONS[LANG] || TRANSLATIONS.fr)[key]; }
+
+
   /* ─── Utilitaires ──────────────────────────────────── */
   var $ = function (id) { return document.getElementById(id); };
   var pad = function (n) { return String(n).padStart(2, '0'); };
@@ -46,9 +366,10 @@
   /* Libellé court de la date sélectionnée */
   function dateLabel(d) {
     var offset = dayOffset();
-    if (offset === 0) return "Aujourd'hui";
-    if (offset === 1) return 'Demain';
-    return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    if (offset === 0) return t('dateToday');
+    if (offset === 1) return t('dateTomorrow');
+    var loc = LANG === 'en' ? 'en-GB' : 'fr-FR';
+    return d.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
   /* ─── Stockage (plus de token requis) ─────────────── */
@@ -70,20 +391,20 @@
 
   /* ─── Helpers visuels ───────────────────────────────── */
   function scCol(s) { return s >= 75 ? '#10B981' : s >= 50 ? '#F59E0B' : '#EF4444'; }
-  function scLbl(s) { return s >= 75 ? 'Bonnes conditions' : s >= 50 ? 'Conditions moyennes' : 'Conditions dégradées'; }
+  function scLbl(s) { return s >= 75 ? t('scoreBon') : s >= 50 ? t('scoreMoyen') : t('scoreDeg'); }
   function bcls(v) {
     var s = (v || '').toLowerCase();
-    if (['bon','faible','favorable','très bon','excellent','non nécessa'].some(function(k){return s.indexOf(k)>=0;})) return 'bg';
-    if (['modéré','moyen','acceptable','satisfai'].some(function(k){return s.indexOf(k)>=0;})) return 'ba';
-    if (['élevé','mauvais','très','dégradé','recommandé'].some(function(k){return s.indexOf(k)>=0;})) return 'br';
+    if (['bon','faible','favorable','très bon','excellent','non nécessa','good','low','favour','not need','very good'].some(function(k){return s.toLowerCase().indexOf(k)>=0;})) return 'bg';
+    if (['modéré','moyen','acceptable','satisfai','moderate','fair'].some(function(k){return s.toLowerCase().indexOf(k)>=0;})) return 'ba';
+    if (['élevé','mauvais','très','dégradé','recommandé','high','poor','very','advis'].some(function(k){return s.toLowerCase().indexOf(k)>=0;})) return 'br';
     return 'bb';
   }
   function uvLvl(u) {
-    if (u<=2) return {l:'Faible',c:'#10B981'};
-    if (u<=5) return {l:'Modéré',c:'#F59E0B'};
-    if (u<=7) return {l:'Élevé',c:'#F97316'};
-    if (u<=10) return {l:'Très élevé',c:'#EF4444'};
-    return {l:'Extrême',c:'#8B5CF6'};
+    if (u<=2) return {l:t('uvFaible'),c:'#10B981'};
+    if (u<=5) return {l:t('uvModere'),c:'#F59E0B'};
+    if (u<=7) return {l:t('uvEleve'),c:'#F97316'};
+    if (u<=10) return {l:t('uvTresEleve'),c:'#EF4444'};
+    return {l:t('uvExtreme'),c:'#8B5CF6'};
   }
   function wmoIcon(c) {
     var m={0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌧',
@@ -92,16 +413,16 @@
     return m[c] || '🌡';
   }
   function wmoDesc(c) {
-    if (c===0) return 'Ciel dégagé'; if (c<=2) return 'Légèrement nuageux';
-    if (c===3) return 'Couvert'; if (c<=48) return 'Brumeux';
-    if (c<=57) return 'Bruine'; if (c<=67) return 'Pluie';
-    if (c<=77) return 'Neige'; if (c<=82) return 'Averses'; return 'Orageux';
+    if (c===0) return t('wmoCode0'); if (c<=2) return t('wmoCode1');
+    if (c===3) return t('wmoCode3'); if (c<=48) return t('wmoCode45');
+    if (c<=57) return t('wmoCode51'); if (c<=67) return t('wmoCode61');
+    if (c<=77) return t('wmoCode71'); if (c<=82) return t('wmoCode80'); return t('wmoCode95');
   }
   function euAqi(a) {
-    if (a==null) return {l:'—',c:'bb'}; if (a<=20) return {l:'Très bon',c:'bg'};
-    if (a<=40) return {l:'Bon',c:'bg'}; if (a<=60) return {l:'Satisfaisant',c:'ba'};
-    if (a<=80) return {l:'Médiocre',c:'ba'}; if (a<=100) return {l:'Mauvais',c:'br'};
-    return {l:'Très mauvais',c:'br'};
+    if (a==null) return {l:'—',c:'bb'}; if (a<=20) return {l:t('aqiTresBon'),c:'bg'};
+    if (a<=40) return {l:t('aqiBon'),c:'bg'}; if (a<=60) return {l:t('aqiSat'),c:'ba'};
+    if (a<=80) return {l:t('aqiMed'),c:'ba'}; if (a<=100) return {l:t('aqiMauvais'),c:'br'};
+    return {l:t('aqiTresMauvais'),c:'br'};
   }
 
   /* ─── Sélecteur de date ─────────────────────────────
@@ -122,10 +443,11 @@
       chip.className = 'date-chip' + (i === 0 ? ' active' : '');
       chip.dataset.offset = i;
 
-      var dayName = i === 0 ? "Auj." : i === 1 ? 'Dem.' :
-        d.toLocaleDateString('fr-FR', { weekday: 'short' });
+      var loc = LANG === 'en' ? 'en-GB' : 'fr-FR';
+      var dayName = i === 0 ? t('chipToday') : i === 1 ? t('chipTomorrow') :
+        d.toLocaleDateString(loc, { weekday: 'short' });
+      var monthStr = d.toLocaleDateString(loc, { month: 'short' });
       var dayNum = d.getDate();
-      var monthStr = d.toLocaleDateString('fr-FR', { month: 'short' });
 
       chip.innerHTML =
         '<span class="dc-day">' + dayName + '</span>' +
@@ -263,7 +585,7 @@
       '&timezone=Europe%2FParis&forecast_days=16';
 
     return fetch(url)
-      .then(function(r) { if (!r.ok) throw new Error('Météo HTTP ' + r.status); return r.json(); })
+      .then(function(r) { if (!r.ok) throw new Error((LANG==='en'?'Weather HTTP ':'Météo HTTP ') + r.status); return r.json(); })
       .then(function(d) {
         var dy = d.daily;
         if (offset === 0) {
@@ -349,22 +671,22 @@
         var no2  = safeFix(h.nitrogen_dioxide, hi);
         var o3   = safeFix(h.ozone, hi);
 
-        var pollens = {
-          'Aulne':     safeRound(h.alder_pollen, hi)  || 0,
-          'Bouleau':   safeRound(h.birch_pollen, hi)  || 0,
-          'Graminées': safeRound(h.grass_pollen, hi)  || 0,
-          'Armoise':   safeRound(h.mugwort_pollen, hi)|| 0,
-          'Olivier':   safeRound(h.olive_pollen, hi)  || 0
-        };
+        var pn = t('pollenNames');
+        var pollens = {};
+        pollens[pn.Aulne]     = safeRound(h.alder_pollen, hi)  || 0;
+        pollens[pn.Bouleau]   = safeRound(h.birch_pollen, hi)  || 0;
+        pollens[pn.Graminées] = safeRound(h.grass_pollen, hi)  || 0;
+        pollens[pn.Armoise]   = safeRound(h.mugwort_pollen, hi)|| 0;
+        pollens[pn.Olivier]   = safeRound(h.olive_pollen, hi)  || 0;
 
         var polMax = Math.max.apply(null, Object.values(pollens));
         var polActifs = Object.keys(pollens).filter(function(k) { return pollens[k] > 2; });
         var polNiveau = outOfRange
-          ? {l:'Données indisponibles',c:'bb'}
-          : polMax < 10  ? {l:'Faible',c:'bg'}
-          : polMax < 50  ? {l:'Modéré',c:'ba'}
-          : polMax < 200 ? {l:'Élevé',c:'ba'}
-          :                {l:'Très élevé',c:'br'};
+          ? {l:t('pollenNA'),c:'bb'}
+          : polMax < 10  ? {l:t('pollenFaible'),c:'bg'}
+          : polMax < 50  ? {l:t('pollenModere'),c:'ba'}
+          : polMax < 200 ? {l:t('pollenEleve'),c:'ba'}
+          :                {l:t('pollenTresEleve'),c:'br'};
 
         return {
           aqi: outOfRange ? null : aqi,
@@ -388,13 +710,13 @@
     return fetch(url)
       .then(function(r) { if (!r.ok) throw new Error('OSRM HTTP ' + r.status); return r.json(); })
       .then(function(d) {
-        if (!d.routes || !d.routes.length) throw new Error('Aucun itinéraire trouvé');
+        if (!d.routes || !d.routes.length) throw new Error(LANG==='en'?'No route found':'Aucun itinéraire trouvé');
         var rt = d.routes[0], distM = rt.distance;
         return {
           distKm: Math.round(distM / 1000),
           dist: distM >= 1000 ? Math.round(distM / 1000) + ' km' : Math.round(distM) + ' m',
           dur: fmtDur(rt.duration), durSec: rt.duration,
-          note: 'Durée théorique sans trafic (OSRM / OpenStreetMap)'
+          note: t('routeNote')
         };
       });
   }
@@ -618,13 +940,13 @@
   /* Convertit un mode MOTIS en libellé court */
   function modeToLabel(mode) {
     var m = (mode || '').toUpperCase();
-    if (m === 'RAIL' || m === 'HIGHSPEED_RAIL' || m === 'REGIONAL_RAIL') return 'Train';
-    if (m === 'BUS' || m === 'COACH')           return 'Bus';
-    if (m === 'SUBWAY')                         return 'Métro';
-    if (m === 'TRAM')                           return 'Tram';
-    if (m === 'FERRY')                          return 'Ferry';
-    if (m === 'AIRPLANE')                       return 'Avion';
-    return 'Transport';
+    if (m === 'RAIL' || m === 'HIGHSPEED_RAIL' || m === 'REGIONAL_RAIL') return t('modeTrain');
+    if (m === 'BUS' || m === 'COACH')           return t('modeBus');
+    if (m === 'SUBWAY')                         return t('modeSubway');
+    if (m === 'TRAM')                           return t('modeTram');
+    if (m === 'FERRY')                          return t('modeFerry');
+    if (m === 'AIRPLANE')                       return t('modePlane');
+    return t('modeTransit');
   }
 
   /* Fiabilité estimée selon le mode */
@@ -670,13 +992,13 @@
     var coutCarSolo = carburant + peages;
     var co2Car = Math.round(128 * dist / 1000);
     var noteVoiture = peages > 0
-      ? 'Carb. ~' + carburant + '€ + péages ~' + peages + '€ (solo)'
-      : 'Carburant estimé (sans péages)';
+      ? t('carFuelToll')(carburant, peages)
+      : t('carFuelOnly');
     modes.push({
-      mode:'Voiture', icon:'🚗', duree:(rt&&rt.dur)||'—',
+      mode:t('modeCar'), icon:'🚗', duree:(rt&&rt.dur)||'—',
       cout:'~' + coutCarSolo + '€',
       fib:78, co2kg:co2Car, co2:co2Car+' kg',
-      score:62, note:noteVoiture
+      score:62, note:noteVoiture  // already uses t() below
     });
 
     /* ── Train ─────────────────────────────────────────────────────────
@@ -696,7 +1018,7 @@
         cout:'~' + coutTrain + '€',
         fib:t.fiabilite, co2kg:co2t,
         co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',
-        score:88, note:'Transitous (temps réel)'
+        score:88, note:t('trainRealtime')
       });
     } else if (dist > 5) {
       var co2t2 = +(1.7 * dist / 1000).toFixed(2);
@@ -709,7 +1031,7 @@
         cout:'~' + coutTrain2 + '€',
         fib:88, co2kg:co2t2,
         co2:co2t2<1?Math.round(co2t2*1000)+' g':co2t2.toFixed(1)+' kg',
-        score:85, note:'Durée & prix estimés'
+        score:85, note:t('trainEstim')
       });
     }
 
@@ -720,11 +1042,11 @@
       var co2b = +(29 * dist / 1000).toFixed(1);
       var coutBus = Math.round(Math.max(5, dist * 0.05));
       modes.push({
-        mode:'Bus / Car', icon:'🚌',
+        mode:t('modeBus'), icon:'🚌',
         duree:fmtDur(Math.round(durSec * 1.6)),
         cout:'~' + coutBus + '€',
         fib:82, co2kg:+co2b, co2:co2b+' kg',
-        score:65, note:'Estimation FlixBus / BlaBlaCar Bus'
+        score:65, note:t('busEstim')
       });
 
       /* ── Covoiturage ─────────────────────────────────────────────────
@@ -733,20 +1055,20 @@
       var co2v = +(51 * dist / 1000).toFixed(1);
       var coutCov = Math.round(Math.max(5, dist * 0.06));
       modes.push({
-        mode:'Covoiturage', icon:'🚘',
+        mode:t('modeCarpool'), icon:'🚘',
         duree:fmtDur(Math.round(durSec * 1.1)),
         cout:'~' + coutCov + '€',
         fib:72, co2kg:+co2v, co2:co2v+' kg',
-        score:68, note:'Estimation BlaBlaCar'
+        score:68, note:t('carpoolEstim')
       });
     }
 
     if (dist <= 20) {
       modes.push({
-        mode:'Vélo', icon:'🚲',
+        mode:t('modeBike'), icon:'🚲',
         duree:fmtDur(Math.round(dist * 4 * 60)),
         cout:'0€', fib:95, co2kg:0, co2:'0',
-        score:dist <= 10 ? 82 : 60, note:'~15 km/h moy.'
+        score:dist <= 10 ? 82 : 60, note:t('bikeSpeed')
       });
     }
 
@@ -759,21 +1081,21 @@
   /* ─── Recommandations ────────────────────────────── */
   function buildReco(m, aq, rt) {
     var al=[], alt=[], c=m.code;
-    if (aq.polMax>200) al.push('Pollen très élevé ('+aq.polMax+' gr/m³) — antihistaminiques fortement conseillés');
-    else if(aq.polMax>50) al.push('Pollen élevé — prenez vos antihistaminiques');
-    else if(aq.polMax>10) al.push('Pollen modéré ('+aq.polActifs.join(', ')+')');
-    if (aq.aqi>100) al.push('Qualité air mauvaise (AQI '+aq.aqi+') — masque FFP2 recommandé');
-    else if(aq.aqi>60) al.push('Qualité air médiocre (AQI '+aq.aqi+') — limitez l\'effort');
-    if (c>=95) al.push('Orage prévu — reportez si possible');
-    else if(c>=80) al.push('Averses fortes — imperméable recommandé');
-    else if(c>=51) al.push('Pluie — pensez à votre imperméable');
-    if (m.temp<2) al.push('Gel possible ('+m.temp+'°C) — vigilance verglas');
-    if (m.temp>34) al.push('Canicule ('+m.temp+'°C) — hydratez-vous, évitez 12h–16h');
-    if (m.uv>=8) al.push('UV très élevé ('+m.uv+') — protection 50+ indispensable');
-    else if(m.uv>=6) al.push('UV élevé ('+m.uv+') — SPF 30+ conseillé');
-    if (m.isForecast) al.push('Prévision J+'+dayOffset()+' — données météo estimées, susceptibles d\'évoluer');
-    if (rt) alt.push('Voiture : '+rt.dur+' pour '+rt.dist+' (sans trafic temps réel)');
-    alt.push('Consultez SNCF Connect ou Vianavigo pour les horaires de trains');
+    if (aq.polMax>200) al.push(t('recoPollenHigh')(aq.polMax));
+    else if(aq.polMax>50) al.push(t('recoPollenMed'));
+    else if(aq.polMax>10) al.push(t('recoPollenLow')(aq.polActifs.join(', ')));
+    if (aq.aqi>100) al.push(t('recoAqiBad')(aq.aqi));
+    else if(aq.aqi>60) al.push(t('recoAqiMed')(aq.aqi));
+    if (c>=95) al.push(t('recoStorm'));
+    else if(c>=80) al.push(t('recoRainHeavy'));
+    else if(c>=51) al.push(t('recoRain'));
+    if (m.temp<2) al.push(t('recoFrost')(m.temp));
+    if (m.temp>34) al.push(t('recoHeat')(m.temp));
+    if (m.uv>=8) al.push(t('recoUvHigh')(m.uv));
+    else if(m.uv>=6) al.push(t('recoUvMed')(m.uv));
+    if (m.isForecast) al.push(t('recoForecast')(dayOffset()));
+    if (rt) alt.push(t('recoCarNote')(rt.dur, rt.dist));
+    alt.push(t('recoTrainNote'));
     return { cond: wmoDesc(c), al: al, alt: alt };
   }
 
@@ -796,7 +1118,7 @@
 
   function forecastBadge(isForecast, offset) {
     if (!isForecast) return '';
-    return '<span class="forecast-badge">📅 Prévision J+' + offset + '</span>';
+    return '<span class="forecast-badge">'+t('forecastBadge')(offset)+'</span>';
   }
 
   function renderOverview() {
@@ -806,34 +1128,34 @@
     var off=dayOffset();
     return (
       '<div class="card"><div class="ch">'+
-      '<span class="ct">🌤 Météo à '+DATA.dName+'</span>'+
+      '<span class="ct">'+t('meteoAt')+DATA.dName+'</span>'+
       '<div style="display:flex;align-items:center;gap:5px">'+
-      (m.isForecast?'<span class="forecast-badge">J+'+off+'</span>':'')+
+      (m.isForecast?'<span class="forecast-badge">'+t('forecastBadge')(off)+'</span>':'')+
       '<span class="src-tag">Open-Meteo</span></div>'+
       '</div><div class="cb">'+
       '<div class="wg">'+
       '<div class="wmain"><span style="font-size:1.8rem">'+ico+'</span>'+
       '<div><div style="font-size:2rem;font-weight:800;font-family:var(--fm)">'+m.temp+'°</div>'+
       '<div style="font-size:.7rem;color:var(--t2)">'+reco.cond+
-      (m.isForecast?' · Ressenti estimé ':' · Ressenti ')+m.feels+'°C</div></div>'+
+      (m.isForecast?t('feelsEst'):t('feelsLike'))+m.feels+'°C</div></div>'+
       '<div style="margin-left:auto;text-align:right">'+
-      '<div style="font-size:.58rem;font-family:var(--fm);color:var(--t3)">min / max</div>'+
+      '<div style="font-size:.58rem;font-family:var(--fm);color:var(--t3)">'+t('minMax')+'</div>'+
       '<div style="font-size:.86rem;font-weight:700;font-family:var(--fm)">'+m.tmin+'° / '+m.tmax+'°</div></div></div>'+
-      (m.wind!=null?'<div class="wstat"><div class="wsl">Vent max</div><div class="wsv" style="color:var(--t2)">'+m.wind+' km/h</div></div>':'')+
-      '<div class="wstat"><div class="wsl">Précip.</div><div class="wsv" style="color:'+(m.precipProb>50?'#3B82F6':'var(--t2)')+'">'+m.precipProb+'%</div></div>'+
-      (m.humidity!=null?'<div class="wstat"><div class="wsl">Humidité</div><div class="wsv" style="color:#06B6D4">'+m.humidity+'%</div></div>':'')+
-      (m.clouds!=null?'<div class="wstat"><div class="wsl">Nuages</div><div class="wsv">'+m.clouds+'%</div></div>':'')+
+      (m.wind!=null?'<div class="wstat"><div class="wsl">'+t('windMax')+'</div><div class="wsv" style="color:var(--t2)">'+m.wind+' km/h</div></div>':'')+
+      '<div class="wstat"><div class="wsl">'+t('precip')+'</div><div class="wsv" style="color:'+(m.precipProb>50?'#3B82F6':'var(--t2)')+'">'+m.precipProb+'%</div></div>'+
+      (m.humidity!=null?'<div class="wstat"><div class="wsl">'+t('humidity')+'</div><div class="wsv" style="color:#06B6D4">'+m.humidity+'%</div></div>':'')+
+      (m.clouds!=null?'<div class="wstat"><div class="wsl">'+t('clouds')+'</div><div class="wsv">'+m.clouds+'%</div></div>':'')+
       '<div class="wt2"><div class="wsl" style="margin-bottom:5px">UV '+m.uv+'/11 — <span style="color:'+uv.c+'">'+uv.l+'</span></div>'+
       '<div class="uvg"><div class="uvtrack"><div class="uvneedle" style="left:calc('+uvPct+'% - 5px)"></div></div></div></div>'+
       '</div></div></div>'+
 
-      '<div class="card"><div class="ch"><span class="ct">💨 Qualité de l\'air</span><span class="src-tag">Copernicus CAMS</span></div><div class="cb">'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('airQualityTitle')+'</span><span class="src-tag">Copernicus CAMS</span></div><div class="cb">'+
       (aq.outOfRange || aq.aqi == null
-        ? '<div class="info-note">⏱ Données AQI non disponibles pour J+'+dayOffset()+' (portée max ~5 jours).</div>'
+        ? '<div class="info-note">'+t('aqiNoData')(dayOffset())+'</div>'
         : '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'+
           '<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:800;font-family:var(--fm);flex-shrink:0" class="'+aqI.c+'">'+aq.aqi+'</div>'+
           '<div><div style="font-weight:700;font-size:.85rem">'+aqI.l+'</div>'+
-          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">Indice AQI européen'+(m.isForecast?' · Prévision':' · Actuel')+'</div></div>'+
+          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t('aqiLabel')+(m.isForecast?t('aqiForecast'):t('aqiCurrent'))+'</div></div>'+
           '<span class="badge '+aqI.c+'" style="margin-left:auto">'+aqI.l+'</span></div>'+
           '<div class="wg">'+
           (aq.pm25!=null?'<div class="wstat"><div class="wsl">PM₂.₅</div><div class="wsv" style="font-size:.78rem">'+aq.pm25+' μg/m³</div></div>':'')+
@@ -841,37 +1163,37 @@
           '</div>'
       )+'</div></div>'+
 
-      '<div class="card"><div class="ch"><span class="ct">💡 Recommandations</span></div><div class="cb">'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('recoCardTitle')+'</span></div><div class="cb">'+
       '<div class="rcard"><div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'+
       '<span>🎯</span><span style="font-size:.78rem;font-weight:700;color:var(--cyan)">Conditions de trajet</span></div>'+
       '<div class="rtime">'+reco.cond+'</div>'+
-      '<div class="rtxt">'+(rt?'Voiture : '+rt.dur+' pour '+rt.dist+'.':'Données routières indisponibles.')+'</div></div>'+
+      '<div class="rtxt">'+(rt?t('recoCarNote')(rt.dur,rt.dist):t('recoNA'))+'</div></div>'+
       (reco.al.length?reco.al.map(function(a){return '<div class="ai"><span>⚠️</span><span class="at">'+a+'</span></div>';}).join(''):
-       '<div class="ai"><span>✅</span><span class="at">Conditions généralement favorables pour ce trajet.</span></div>')+
-      (reco.alt.length?'<div style="font-size:.62rem;font-family:var(--fm);color:var(--t3);margin:8px 0 5px;text-transform:uppercase;letter-spacing:1.5px">Infos</div>'+
+       '<div class="ai"><span>✅</span><span class="at">'+t('recoGood')+'</span></div>')+
+      (reco.alt.length?'<div style="font-size:.62rem;font-family:var(--fm);color:var(--t3);margin:8px 0 5px;text-transform:uppercase;letter-spacing:1.5px">'+t('recoInfoTitle')+'</div>'+
        reco.alt.map(function(a){return '<div class="ai"><span>ℹ️</span><span class="at">'+a+'</span></div>';}).join(''):'')+'</div></div>'
     );
   }
 
   function renderRoute() {
     var rt=DATA.rt, modes=DATA.modes;
-    var rtH=!rt?'<div style="padding:12px;color:var(--t3);font-size:.75rem;font-family:var(--fm)">Données routières indisponibles</div>':
+    var rtH=!rt?'<div style="padding:12px;color:var(--t3);font-size:.75rem;font-family:var(--fm)">'+t('routeNA')+'</div>':
       '<div class="wg"><div class="wmain" style="flex-direction:column;align-items:flex-start;gap:4px">'+
       '<div style="font-size:1.4rem;font-weight:800;font-family:var(--fm)">'+rt.dist+'</div>'+
-      '<div style="font-size:.7rem;color:var(--t2)">'+rt.dur+' estimé hors trafic</div></div>'+
+      '<div style="font-size:.7rem;color:var(--t2)">'+rt.dur+t('routeEstim')+'</div></div>'+
       '<div class="wstat"><div class="wsl">Durée</div><div class="wsv">'+rt.dur+'</div></div>'+
       '<div class="wstat"><div class="wsl">Distance</div><div class="wsv">'+rt.dist+'</div></div></div>'+
-      '<div class="info-note">ℹ '+rt.note+'</div>';
+      '<div class="info-note">ℹ '+rt.note+'</div>';  // rt.note already uses t()
     return (
-      '<div class="card"><div class="ch"><span class="ct">🗺 Itinéraire routier</span><span class="src-tag">OSRM · OSM</span></div><div class="cb">'+rtH+'</div></div>'+
-      '<div class="card"><div class="ch"><span class="ct">🚗 Comparaison multi-modes</span></div><div class="cb">'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('routeCard')+'</span><span class="src-tag">OSRM · OSM</span></div><div class="cb">'+rtH+'</div></div>'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('multiMode')+'</span></div><div class="cb">'+
       '<div class="mgrid">'+modes.map(function(m){
         return '<div class="mc '+(m.best?'best':'')+'">'+
           '<div style="font-size:1.2rem;margin-bottom:4px">'+m.icon+'</div>'+
           '<div style="font-size:.8rem;font-weight:700;margin-bottom:6px">'+m.mode+'</div>'+
-          '<div class="mstat"><span class="mk">⏱ Durée</span><span class="mv">'+m.duree+'</span></div>'+
-          '<div class="mstat"><span class="mk">💶 Coût</span><span class="mv" style="color:var(--em)">'+m.cout+'</span></div>'+
-          '<div class="mstat"><span class="mk">🌍 CO₂</span><span class="mv" style="color:'+
+          '<div class="mstat"><span class="mk">'+t('durLabel')+'</span><span class="mv">'+m.duree+'</span></div>'+
+          '<div class="mstat"><span class="mk">'+t('costLabel')+'</span><span class="mv" style="color:var(--em)">'+m.cout+'</span></div>'+
+          '<div class="mstat"><span class="mk">'+t('co2Label')+'</span><span class="mv" style="color:'+
           (m.co2kg===0?'#10B981':m.co2kg<30?'#10B981':m.co2kg<80?'#F59E0B':'#EF4444')+'">'+m.co2+'</span></div>'+
           (m.note?'<div style="font-size:.55rem;color:var(--t3);font-family:var(--fm);margin-top:4px">'+m.note+'</div>':'')+
           '</div>';
@@ -888,16 +1210,15 @@
     if (aq.outOfRange || Object.keys(aq.pollens).length === 0) {
       pollenHTML =
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
-        '<span class="badge bb">Données non disponibles</span></div>'+
-        '<div class="info-note">⏱ Open-Meteo ne fournit les prévisions de pollen et de qualité '+
-        'de l\'air que sur ~5 jours. Pour J+'+off+', les données ne sont pas encore disponibles.</div>';
+        '<span class="badge bb">'+t('pollenNA')+'</span></div>'+
+        '<div class="info-note">'+t('airNoData')(off)+'</div>';
     } else {
       var keys=Object.keys(aq.pollens);
       var maxP=Math.max.apply(null,Object.values(aq.pollens).concat([1]));
       pollenHTML =
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
         '<span class="badge '+aq.polNiveau.c+'">'+aq.polNiveau.l+'</span>'+
-        '<span style="font-size:.65rem;color:var(--t3);font-family:var(--fm)">'+aq.polMax+' grain/m³ max</span></div>'+
+        '<span style="font-size:.65rem;color:var(--t3);font-family:var(--fm)">'+aq.polMax+' '+t('pollenUnit')+'</span></div>'+
         keys.map(function(k){
           var v=aq.pollens[k],pct=Math.min(100,(v/maxP)*100).toFixed(1);
           var col=v<10?'#10B981':v<50?'#F59E0B':v<200?'#F97316':'#EF4444';
@@ -914,27 +1235,27 @@
     // Section polluants
     var polluantsHTML;
     if (aq.outOfRange || aq.aqi == null) {
-      polluantsHTML = '<div class="info-note">⏱ Données de polluants non disponibles pour ce jour.</div>';
+      polluantsHTML = '<div class="info-note">'+t('airPollNA')+'</div>';
     } else {
-      var polluants=[['PM₂.₅',aq.pm25,'μg/m³',25,'Particules fines'],['PM₁₀',aq.pm10,'μg/m³',50,'Particules grossières'],
-        ['NO₂',aq.no2,'μg/m³',40,"Dioxyde d'azote"],['Ozone',aq.o3,'μg/m³',120,'Ozone troposphérique']];
+      var polluants=[['PM₂.₅',aq.pm25,'μg/m³',25,t('pm25')],['PM₁₀',aq.pm10,'μg/m³',50,t('pm10')],
+        ['NO₂',aq.no2,'μg/m³',40,t('no2')],['Ozone',aq.o3,'μg/m³',120,t('ozone')]];
       polluantsHTML = polluants.map(function(p){
         if(p[1]==null) return '';
         var n=+p[1],col=n<p[3]*0.5?'#10B981':n<p[3]?'#F59E0B':'#EF4444';
         return '<div class="srow"><div class="d2" style="background:'+col+';box-shadow:0 0 5px '+col+'"></div>'+
           '<div style="flex:1"><div class="stxt">'+p[0]+' — '+p[1]+' '+p[2]+'</div>'+
           '<div class="ssub2">'+p[4]+'</div></div></div>';
-      }).join('') || '<div style="font-size:.72rem;color:var(--t3);padding:4px 0">Données polluants indisponibles</div>';
+      }).join('') || '<div style="font-size:.72rem;color:var(--t3);padding:4px 0">'+t('pollutantsNA')+'</div>';
     }
 
     return (
-      '<div class="card"><div class="ch"><span class="ct">🌿 Pollen</span>'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('pollenTabTitle')+'</span>'+
       '<div style="display:flex;align-items:center;gap:5px">'+
       (off>0?'<span class="forecast-badge">J+'+off+'</span>':'')+
       '<span class="src-tag">SILAM</span></div></div>'+
       '<div class="cb">'+pollenHTML+'</div></div>'+
 
-      '<div class="card"><div class="ch"><span class="ct">💨 Qualité air & polluants</span>'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('airTabTitle')+'</span>'+
       '<div style="display:flex;align-items:center;gap:5px">'+
       (off>0?'<span class="forecast-badge">J+'+off+'</span>':'')+
       '<span class="src-tag">CAMS</span></div></div><div class="cb">'+
@@ -942,7 +1263,7 @@
         ? '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'+
           '<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:800;font-family:var(--fm);flex-shrink:0" class="'+aqI.c+'">'+aq.aqi+'</div>'+
           '<div><div style="font-weight:700;font-size:.85rem">'+aqI.l+'</div>'+
-          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">Indice AQI européen</div></div>'+
+          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t('aqiLabel')+'</div></div>'+
           '<span class="badge '+aqI.c+'" style="margin-left:auto">'+aqI.l+'</span></div>'
         : '')+
       polluantsHTML+'</div></div>'
@@ -953,28 +1274,28 @@
     var m=DATA.m, aq=DATA.aq;
     var uv=uvLvl(m.uv), aqI=euAqi(aq.aqi), po=aq.polNiveau;
     var rain=(m.code>=51&&m.code<80)||m.code>=80, masque=aq.aqi>100;
-    var actExt=(aq.aqi<75&&m.uv<8&&!rain&&m.temp>5&&m.temp<35)?'Favorable':(rain||aq.aqi>150)?'Déconseillée':'Acceptable';
+    var actExt=(aq.aqi<75&&m.uv<8&&!rain&&m.temp>5&&m.temp<35)?t('actFav'):(rain||aq.aqi>150)?t('actDec'):t('actAcc');
     var rc=[];
-    if(aq.polActifs.length) rc.push({i:'🌿',t:'Pollens actifs : '+aq.polActifs.join(', ')+'. Vitres fermées, douche en rentrant.'});
+    if(aq.polActifs.length) rc.push({i:'🌿',t:(LANG==='en'?'Active pollens: ':'Pollens actifs : ')+aq.polActifs.join(', ')+(LANG==='en'?'. Keep windows closed, shower when back home.':'. Vitres fermées, douche en rentrant.')});
     if(m.uv>=8) rc.push({i:'☀️',t:'UV '+m.uv+' — crème 50+, chapeau et lunettes UV obligatoires.'});
     else if(m.uv>=6) rc.push({i:'☀️',t:'UV '+m.uv+' — SPF 30+ recommandé pour exposition > 30 min.'});
-    if(masque) rc.push({i:'😷',t:'AQI '+aq.aqi+' — masque FFP2 recommandé en extérieur.'});
-    else if(aq.aqi>60) rc.push({i:'💨',t:'AQI '+aq.aqi+' — évitez l\'effort physique intense dehors.'});
-    if(m.temp>34) rc.push({i:'🌡️',t:m.temp+'°C — hydratez-vous, évitez les heures chaudes.'});
-    if(m.temp<2) rc.push({i:'🧊',t:m.temp+'°C — risque de verglas.'});
-    if(rain) rc.push({i:'🌧️',t:'Précipitations — imperméable conseillé.'});
-    if(!rc.length) rc.push({i:'✅',t:'Conditions favorables pour ce trajet.'});
+    if(masque) rc.push({i:'😷',t:t('recoAqiBad')(aq.aqi)});
+    else if(aq.aqi>60) rc.push({i:'💨',t:t('recoAqiMed')(aq.aqi)});
+    if(m.temp>34) rc.push({i:'🌡️',t:t('recoHeat')(m.temp)});
+    if(m.temp<2) rc.push({i:'🧊',t:t('recoFrost')(m.temp)});
+    if(rain) rc.push({i:'🌧️',t:t('recoRain')});
+    if(!rc.length) rc.push({i:'✅',t:t('recoGood')});
     return (
-      '<div class="card"><div class="ch"><span class="ct">🏥 Santé</span></div><div class="cb">'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('santeTitle')+'</span></div><div class="cb">'+
       '<div class="hgrid">'+
-      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🤧</div><div class="hl">Pollen</div><span class="badge '+po.c+'" style="margin-top:3px;display:inline-flex">'+po.l+'</span></div>'+
-      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">😷</div><div class="hl">Masque</div><div style="font-size:.82rem;font-weight:700;color:'+(masque?'#EF4444':'#10B981')+';margin-top:3px">'+(masque?'Recommandé':'Non nécessaire')+'</div></div>'+
-      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">☀️</div><div class="hl">UV</div><div style="font-size:.82rem;font-weight:700;color:'+uv.c+';margin-top:3px">'+m.uv+'/11 — '+uv.l+'</div></div>'+
-      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🏃</div><div class="hl">Activité ext.</div><span class="badge '+bcls(actExt)+'" style="margin-top:3px;display:inline-flex">'+actExt+'</span></div>'+
-      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">💨</div><div class="hl">Qualité air</div><span class="badge '+aqI.c+'" style="margin-top:3px;display:inline-flex">'+aqI.l+'</span></div>'+
-      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🌡️</div><div class="hl">Température</div><div style="font-size:.82rem;font-weight:700;margin-top:3px">'+m.temp+'°C</div></div>'+
+      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🤧</div><div class="hl">'+t('pollenLabel')+'</div><span class="badge '+po.c+'" style="margin-top:3px;display:inline-flex">'+po.l+'</span></div>'+
+      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">😷</div><div class="hl">'+t('masqueLabel')+'</div><div style="font-size:.82rem;font-weight:700;color:'+(masque?'#EF4444':'#10B981')+';margin-top:3px">'+(masque?'Recommandé':'Non nécessaire')+'</div></div>'+
+      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">☀️</div><div class="hl">'+t('uvLabel')+'</div><div style="font-size:.82rem;font-weight:700;color:'+uv.c+';margin-top:3px">'+m.uv+'/11 — '+uv.l+'</div></div>'+
+      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🏃</div><div class="hl">'+t('actExtLabel')+'</div><span class="badge '+bcls(actExt)+'" style="margin-top:3px;display:inline-flex">'+actExt+'</span></div>'+
+      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">💨</div><div class="hl">'+t('airQualLabel')+'</div><span class="badge '+aqI.c+'" style="margin-top:3px;display:inline-flex">'+aqI.l+'</span></div>'+
+      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🌡️</div><div class="hl">'+t('tempLabel')+'</div><div style="font-size:.82rem;font-weight:700;margin-top:3px">'+m.temp+'°C</div></div>'+
       '</div></div></div>'+
-      '<div class="card"><div class="ch"><span class="ct">💊 Recommandations</span></div><div class="cb">'+
+      '<div class="card"><div class="ch"><span class="ct">'+t('santeReco')+'</span></div><div class="cb">'+
       rc.map(function(r){return '<div class="ai"><span style="font-size:.9rem">'+r.i+'</span><span class="at">'+r.t+'</span></div>';}).join('')+
       '</div></div>'
     );
@@ -986,21 +1307,18 @@
     var tH;
 
     if (!trains) {
-      tH='<div class="ai"><span>⏳</span><span class="at">Chargement des trains…</span></div>';
+      tH='<div class="ai"><span>⏳</span><span class="at">'+t('trainsLoading')+'</span></div>';
     } else if (trains._err) {
       // Distinguer surcharge vs erreur réseau vraie
-      var isOverload = trains._err.indexOf('surchargé') >= 0 || trains._err.indexOf('timeout') >= 0 || trains._err.indexOf('limité') >= 0;
+      var isOverload = trains._err.indexOf('surchargé') >= 0 || trains._err.indexOf('overload') >= 0 || trains._err.indexOf('timeout') >= 0 || trains._err.indexOf('limité') >= 0 || trains._err.indexOf('limited') >= 0;
       tH='<div class="ai" style="margin-bottom:6px">'+
          '<span>'+(isOverload?'⏳':'⚠️')+'</span>'+
          '<span class="at">'+trains._err+'</span></div>'+
          (isOverload
-           ? '<div class="info-note">Transitous est un service communautaire bénévole à ressources limitées. '+
-             'Les 500/504 indiquent une surcharge temporaire — les données de trains seront disponibles dans quelques minutes.</div>'
-           : '<div class="info-note">En cas de panne persistante, consultez directement SNCF Connect.</div>');
+           ? '<div class="info-note">'+t('trainsOverloadNote')+'</div>'
+           : '<div class="info-note">'+t('trainsErrNote')+'</div>');
     } else if (trains._empty) {
-      tH='<div class="ai"><span>ℹ️</span><span class="at">Aucun trajet en transport commun trouvé'+
-         (off>0?' pour le '+dateLabel(selectedDate)+' à partir de 08h00':'')+
-         '. Cette liaison n\'est peut-être pas desservie par train direct.</span></div>';
+      tH='<div class="ai"><span>ℹ️</span><span class="at">'+t('trainsEmpty')(off,dateLabel(selectedDate))+'</span></div>';
     } else if (trains.trains && trains.trains.length) {
       tH=(off>0?'<div class="info-note" style="margin-bottom:8px">📅 Trains du '+
           dateLabel(selectedDate)+' à partir de 08h00</div>':'')+
@@ -1008,19 +1326,19 @@
           return '<div class="tc">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
             '<div><div class="ttime">'+t.depart+'</div>'+
-            '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">Dép.</div></div>'+
+            '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">'+t('trainsDep')+'</div></div>'+
             '<div style="flex:1;text-align:center;color:var(--cyan);font-size:.8rem">──→<br>'+
             '<span style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t.duree+'</span></div>'+
             '<div><div class="ttime">'+t.arrivee+'</div>'+
-            '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">Arr.</div></div>'+
+            '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">'+t('trainsArr')+'</div></div>'+
             '<div class="tmeta">'+
             '<span class="tnum">'+t.numero+'</span>'+
             (t.transfers>0
-              ?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t.transfers+' corresp.</span>'
-              :'<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">Direct</span>')+
+              ?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t('trainsTransfers')(t.transfers)+'</span>'
+              :'<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">'+t('trainsDirect')+'</span>')+
             '<div style="display:flex;align-items:center;gap:3px;font-size:.62rem;font-family:var(--fm);color:var(--t2)">'+
             '<div class="rb"><div class="rf" style="width:'+t.fiabilite+'%"></div></div>'+t.fiabilite+'%</div>'+
-            (t.realTime?'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">🟢 Temps réel</span>':'')+
+            (t.realTime?'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>':'')+
             '</div></div>';
         }).join('');
     } else {
@@ -1033,24 +1351,19 @@
       '<span class="src-tag">Transitous · MOTIS 2</span></div>'+
       '<div class="cb">'+tH+'</div></div>'+
 
-      '<div class="card"><div class="ch"><span class="ct">📱 Ressources officielles</span></div><div class="cb">'+
-      [['SNCF Connect','https://www.sncf-connect.com','🎫 Billets & horaires officiels'],
-       ['Ouigo','https://www.ouigo.com','🟢 Trains low-cost'],
-       ['Trainline','https://www.thetrainline.com/fr','🔵 Comparateur de prix'],
-       ['Vianavigo','https://www.vianavigo.com','🟣 Île-de-France (RER, Transilien)'],
-       ['RATP','https://www.ratp.fr','🔴 Paris & banlieue']
-      ].map(function(l){
+      '<div class="card"><div class="ch"><span class="ct">'+t('trainsOfficialTitle')+'</span></div><div class="cb">'+
+      t('trainsLinks').map(function(l){
         return '<div class="srow"><div style="flex:1"><div class="stxt">'+l[0]+'</div>'+
           '<div class="ssub2">'+l[2]+'</div></div>'+
           '<a href="'+l[1]+'" target="_blank" style="font-size:.65rem;color:var(--blue);'+
-          'font-family:var(--fm);text-decoration:none;flex-shrink:0">Ouvrir →</a></div>';
+          'font-family:var(--fm);text-decoration:none;flex-shrink:0">'+t('trainsOpenLink')+'</a></div>';
       }).join('')+'</div></div>'+
 
-      (rt?'<div class="card"><div class="ch"><span class="ct">🚗 Alternative voiture</span>'+
+      (rt?'<div class="card"><div class="ch"><span class="ct">'+t('trainsCarAlt')+'</span>'+
        '<span class="src-tag">OSRM</span></div><div class="cb">'+
        '<div class="srow"><div class="d2 dg"></div><div style="flex:1">'+
        '<div class="stxt">'+rt.dist+' · '+rt.dur+'</div>'+
-       '<div class="ssub2">Durée théorique sans trafic (OSRM / OpenStreetMap)</div>'+
+       '<div class="ssub2">'+t('trainsCarNote')+'</div>'+
        '</div></div></div></div>':'')
     );
   }
@@ -1080,13 +1393,13 @@
     $('ebox').style.display='none';
     show('loading');
     ['s0','s1','s2','s3','s4'].forEach(function(id){ setStep(id,''); });
-    $('lmsg').textContent='Géocodage des villes…';
+    $('lmsg').textContent=t('loadingGeocode');
 
     setStep('s0','loading');
     Promise.all([geocodeBAN(orig), geocodeBAN(dest)])
       .then(function(geos){
         var oGeo=geos[0], dGeo=geos[1]; setStep('s0','done');
-        setStep('s1','loading'); $('lmsg').textContent='Récupération météo…';
+        setStep('s1','loading'); $('lmsg').textContent=t('loadingMeteo');
         return fetchMeteo(dGeo.lat, dGeo.lon)
           .then(function(m){ setStep('s1','done'); return {oGeo:oGeo,dGeo:dGeo,m:m}; })
           .catch(function(){
@@ -1096,7 +1409,7 @@
       })
       .then(function(ctx){
         setStep('s2','loading'); setStep('s3','loading');
-        $('lmsg').textContent="Qualité de l'air & pollen…";
+        $('lmsg').textContent=t('loadingAir');
         return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon)
           .then(function(aq){ setStep('s2','done'); setStep('s3','done'); ctx.aq=aq; return ctx; })
           .catch(function(){
@@ -1106,7 +1419,7 @@
           });
       })
       .then(function(ctx){
-        setStep('s4','loading'); $('lmsg').textContent='Calcul itinéraire…';
+        setStep('s4','loading'); $('lmsg').textContent=t('loadingRoute');
         return fetchRoute(ctx.oGeo.lat,ctx.oGeo.lon,ctx.dGeo.lat,ctx.dGeo.lon)
           .then(function(rt){ setStep('s4','done'); ctx.rt=rt; return ctx; })
           .catch(function(){ setStep('s4','fail'); ctx.rt=null; return ctx; });
@@ -1141,7 +1454,7 @@
         $('score-circ').innerHTML=mkCircle(scoreRes.score);
         $('score-lbl').textContent=scLbl(scoreRes.score);
         $('score-lbl').style.color=scCol(scoreRes.score);
-        $('score-detail').textContent='Score '+scoreRes.score+'/100 · météo + air + pollen';
+        $('score-detail').textContent=t('scoreDetail')(scoreRes.score);
 
         document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
         document.querySelector('.tab[data-tab="overview"]').classList.add('active');
@@ -1151,7 +1464,7 @@
       .catch(function(e){
         show('search');
         var ebox=$('ebox');
-        ebox.textContent=e.message||'Erreur inattendue. Vérifiez votre connexion.';
+        ebox.textContent=e.message||t('errUnexpected');
         ebox.style.display='block';
       });
   }
@@ -1168,14 +1481,14 @@
     (function() {
       var btn = document.getElementById('theme-toggle');
       if (!btn) return;
-      function applyTheme(t) {
-        document.documentElement.setAttribute('data-theme', t);
-        var icon = t === 'light' ? '🌙' : '☀️';
-        var lbl  = t === 'light' ? 'Passer en mode sombre' : 'Passer en mode clair';
+      function applyTheme(th) {
+        document.documentElement.setAttribute('data-theme', th);
+        var icon = th === 'light' ? '🌙' : '☀️';
+        var lbl  = th === 'light' ? t('themeDark') : t('themeLight');
         // Sync both toggle buttons (search screen + dashboard)
         [document.getElementById('theme-toggle'), document.getElementById('theme-toggle-dash')]
           .forEach(function(b) { if (b) { b.textContent = icon; b.setAttribute('aria-label', lbl); } });
-        try { localStorage.setItem('tripmind-theme', t); } catch(e) {}
+        try { localStorage.setItem('tripmind-theme', th); } catch(e) {}
       }
       var saved = 'dark';
       try { saved = localStorage.getItem('tripmind-theme') || 'dark'; } catch(e) {}
@@ -1208,6 +1521,66 @@
     if(settingsIcon) settingsIcon.addEventListener('click', function(){ show('settings'); });
     var goSettings=$('go-settings');
     if(goSettings) goSettings.addEventListener('click', function(){ show('settings'); });
+
+
+    /* ─── LANGUE FR / EN ─────────────────────────────── */
+    (function() {
+      var btn = document.getElementById('lang-toggle');
+      if (!btn) return;
+      function applyLang(l) {
+        LANG = l;
+        try { localStorage.setItem('tripmind-lang', l); } catch(e) {}
+        // Update static DOM strings
+        var el;
+        el = document.getElementById('logo-sub'); if(el) el.textContent = t('logoSub');
+        el = document.getElementById('pills-title'); if(el) el.textContent = t('pillsTitle');
+        ['pill0','pill1','pill2','pill3','pill4','pill5'].forEach(function(id,i){
+          el = document.getElementById(id); if(el) el.textContent = t('pill'+i);
+        });
+        el = document.getElementById('date-section-label'); if(el) el.textContent = t('dateLabel');
+        el = document.getElementById('orig-label'); if(el) el.textContent = t('origLabel');
+        el = document.getElementById('orig-inp'); if(el) el.placeholder = t('origPlaceholder');
+        el = document.getElementById('dest-label'); if(el) el.textContent = t('destLabel');
+        el = document.getElementById('dest-inp'); if(el) el.placeholder = t('destPlaceholder');
+        el = document.getElementById('swap-btn'); if(el) el.setAttribute('aria-label', t('swapAriaLabel'));
+        el = document.getElementById('analyze-btn'); if(el) el.textContent = t('analyzeBtn');
+        el = document.getElementById('go-settings'); if(el) el.textContent = t('aboutSources');
+        el = document.getElementById('settings-back'); if(el) el.textContent = t('settingsBack');
+        el = document.getElementById('settings-title'); if(el) el.textContent = t('settingsTitle');
+        el = document.getElementById('transitous-subtitle'); if(el) el.textContent = t('transitousSubtitle');
+        el = document.getElementById('transitous-step1'); if(el) el.innerHTML = t('transitousStep1');
+        el = document.getElementById('transitous-step2'); if(el) el.textContent = t('transitousStep2');
+        el = document.getElementById('transitous-step3'); if(el) el.textContent = t('transitousStep3');
+        el = document.getElementById('free-apis-title'); if(el) el.textContent = t('freeApisTitle');
+        ['freeApi1','freeApi2','freeApi3','freeApi4','freeApi5','freeApi6'].forEach(function(id){
+          el = document.getElementById(id); if(el) el.innerHTML = t(id);
+        });
+        el = document.getElementById('privacy-notice'); if(el) el.innerHTML = t('privacyNotice');
+        el = document.getElementById('s0'); if(el) el.querySelector('.lstep-txt') && (el.querySelector('.lstep-txt').textContent = t('step0'));
+        el = document.getElementById('back-btn'); if(el) el.textContent = t('backBtn');
+        el = document.getElementById('tab-overview'); if(el) el.textContent = t('tabOverview');
+        el = document.getElementById('tab-route'); if(el) el.textContent = t('tabRoute');
+        el = document.getElementById('tab-air'); if(el) el.textContent = t('tabAir');
+        el = document.getElementById('tab-sante'); if(el) el.textContent = t('tabSante');
+        el = document.getElementById('tab-trains'); if(el) el.textContent = t('tabTrains');
+        el = document.getElementById('score-subtitle'); if(el) el.textContent = t('scoreSubtitle');
+        el = document.getElementById('lmsg'); if(el && el.textContent === '') el.textContent = t('loadingInit');
+        // Rebuild date chips with correct locale
+        buildDatePicker();
+        updateDateDisplay();
+        // Refresh lang toggle label
+        var lb = document.getElementById('lang-toggle');
+        if(lb) lb.textContent = t('langToggleLabel');
+        // If dashboard is showing, re-render current tab
+        if (DATA) {
+          var activeTab = document.querySelector('.tab.active');
+          if (activeTab) renderTab(activeTab.dataset.tab);
+        }
+      }
+      btn.addEventListener('click', function() { applyLang(LANG === 'fr' ? 'en' : 'fr'); });
+      // Apply on first load to set button label
+      btn.textContent = t('langToggleLabel');
+    })();
 
     $('analyze-btn').addEventListener('click', analyze);
     $('orig-inp').addEventListener('keydown', function(e){ if(e.key==='Enter') analyze(); });
