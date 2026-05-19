@@ -33,3 +33,7 @@ Thumbs.db
 .env.local
 .env.*.local
 secrets.json
+
+# ── Tests ─────────────────────────────────────────────
+playwright-report/
+test-results/

@@ -189,3 +189,11 @@ export async function runMockedAnalysis(
   await page.locator(SEL.analyzeBtn).click();
   await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 15_000 });
 }
+
+/** Fill origin + destination and click Analyze — convenience for @live tests */
+export async function fillAndAnalyze(page: Page, orig: string, dest: string) {
+  await page.locator(SEL.origInput).fill(orig);
+  await page.locator(SEL.destInput).fill(dest);
+  await page.locator(SEL.analyzeBtn).click();
+  await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 30_000 });
+}

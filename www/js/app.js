@@ -20,7 +20,7 @@
    ──────────────────────────────────────────────────── */
   var LANG = (function() {
     try { var s = localStorage.getItem('tripmind-lang'); if (s) return s; } catch(e) {}
-    return (navigator.language || 'fr').startsWith('fr') ? 'fr' : 'en';
+    return 'fr'; // French by default; use the toggle button to switch to English
   })();
 
   var TRANSLATIONS = {
@@ -383,7 +383,7 @@
   /* ─── Navigation ────────────────────────────────────── */
   function show(id) {
     document.querySelectorAll('.scr').forEach(function(s) { s.classList.remove('on'); });
-    var t = $('scr-' + id); if (t) t.classList.add('on');
+    var scr = $('scr-' + id); if (scr) scr.classList.add('on');
   }
   function setStep(i, state) {
     var el = $('s' + i); if (el) el.className = 'lstep ' + state;
@@ -476,6 +476,7 @@
 
   /* ─── AUTOCOMPLÉTION BAN ─────────────────────────── */
   var acTimers = {};
+  var acClosers = []; // registered by each setupAutocomplete instance
 
   function setupAutocomplete(inputId, listId) {
     var inp = $(inputId), list = $(listId);
@@ -488,6 +489,7 @@
       inp.setAttribute('aria-expanded', 'false');
       selectedIndex = -1;
     }
+    acClosers.push(function() { closeList(); });
     function fillInput(cityName) { inp.value = cityName; closeList(); }
     function renderList(features) {
       list.innerHTML = ''; selectedIndex = -1; lastSuggestions = features;
@@ -516,12 +518,34 @@
       clearTimeout(acTimers[inputId]);
       if (q.length < 2) { closeList(); return; }
       acTimers[inputId] = setTimeout(function() {
-        fetch('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) +
-              '&type=housenumber&limit=7&autocomplete=1')
+        var base = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) + '&autocomplete=1';
+        // Fetch municipalities (type=municipality) with autocomplete=1.
+        // For short queries that return nothing, try type=locality (hamlets, suburbs)
+        // then finally unrestricted but limited to avoid noisy address results.
+        fetch(base + '&type=municipality&limit=6')
           .then(function(r) { return r.json(); })
-          .then(function(d) { renderList(d.features || []); })
+          .then(function(d) {
+            var features = d.features || [];
+            if (features.length) { renderList(features); return; }
+            return fetch(base + '&type=locality&limit=6')
+              .then(function(r2) { return r2.json(); })
+              .then(function(d2) {
+                var f2 = d2.features || [];
+                if (f2.length) { renderList(f2); return; }
+                // Last resort: unrestricted but filter to city-like results only
+                return fetch(base + '&limit=8')
+                  .then(function(r3) { return r3.json(); })
+                  .then(function(d3) {
+                    var cityTypes = ['municipality','locality','city'];
+                    var filtered = (d3.features || []).filter(function(f) {
+                      return cityTypes.indexOf(f.properties.type) >= 0;
+                    });
+                    renderList(filtered.length ? filtered : (d3.features || []).slice(0,5));
+                  });
+              });
+          })
           .catch(function() { closeList(); });
-      }, 220);
+      }, 150);
     });
     inp.addEventListener('keydown', function(e) {
       if (!list.classList.contains('visible')) return;
@@ -533,8 +557,11 @@
         fillInput(lastSuggestions[selectedIndex].properties.label || lastSuggestions[selectedIndex].properties.name || '');
       } else if (e.key === 'Escape') { closeList(); }
     });
-    inp.addEventListener('blur', function() { setTimeout(function() { closeList(); }, 200); });
+    inp.addEventListener('blur', function() { setTimeout(function() { closeList(); }, 150); });
     document.addEventListener('click', function(e) {
+      if (e.target !== inp && !list.contains(e.target)) closeList();
+    });
+    document.addEventListener('focusin', function(e) {
       if (e.target !== inp && !list.contains(e.target)) closeList();
     });
   }
@@ -761,7 +788,9 @@
   function isoToHHMM(iso) {
     if (!iso) return '--:--';
     var d = new Date(iso);
-    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    // Transitous/MOTIS returns local times with a Z suffix (treats them as UTC)
+    // so we read with UTC getters to get the correct displayed time
+    return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
   }
 
   /* Parse une réponse MOTIS v1 (Transitous).
@@ -1007,16 +1036,16 @@
      * Pour TER : ~0.08€/km.
      * ─────────────────────────────────────────────────────────────────── */
     if (trains && trains.trains && trains.trains.length) {
-      var t = trains.trains[0];
+      var tr0 = trains.trains[0];
       var co2t = +(1.7 * dist / 1000).toFixed(2);
       // Distinguer TER (< 150 km) du TGV/Intercités
       var coutTrain = dist < 150
         ? Math.round(Math.max(8,  dist * 0.08))   // TER
         : Math.round(Math.min(90, Math.max(25, dist * 0.12))); // TGV
       modes.push({
-        mode:'Train', icon:'🚆', duree:t.duree,
+        mode:t('modeTrain'), icon:'🚆', duree:tr0.duree,
         cout:'~' + coutTrain + '€',
-        fib:t.fiabilite, co2kg:co2t,
+        fib:tr0.fiabilite, co2kg:co2t,
         co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',
         score:88, note:t('trainRealtime')
       });
@@ -1228,7 +1257,7 @@
             '<div class="pbar"><div class="pfill" style="width:'+pct+'%;background:'+col+'"></div></div></div>';
         }).join('')+
         (aq.polActifs.length
-          ? '<div class="ptags" style="margin-top:8px">'+aq.polActifs.map(function(t){return '<span class="ptag">🌸 '+t+'</span>';}).join('')+'</div>'
+          ? '<div class="ptags" style="margin-top:8px">'+aq.polActifs.map(function(pollen){return '<span class="ptag">🌸 '+pollen+'</span>';}).join('')+'</div>'
           : '<div style="font-size:.72rem;color:var(--em);margin-top:6px">✓ Aucun pollen significatif</div>');
     }
 
@@ -1322,23 +1351,23 @@
     } else if (trains.trains && trains.trains.length) {
       tH=(off>0?'<div class="info-note" style="margin-bottom:8px">📅 Trains du '+
           dateLabel(selectedDate)+' à partir de 08h00</div>':'')+
-        trains.trains.map(function(t,i){
+        trains.trains.map(function(tr,i){
           return '<div class="tc">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
-            '<div><div class="ttime">'+t.depart+'</div>'+
+            '<div><div class="ttime">'+tr.depart+'</div>'+
             '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">'+t('trainsDep')+'</div></div>'+
             '<div style="flex:1;text-align:center;color:var(--cyan);font-size:.8rem">──→<br>'+
-            '<span style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t.duree+'</span></div>'+
-            '<div><div class="ttime">'+t.arrivee+'</div>'+
+            '<span style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+tr.duree+'</span></div>'+
+            '<div><div class="ttime">'+tr.arrivee+'</div>'+
             '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">'+t('trainsArr')+'</div></div>'+
             '<div class="tmeta">'+
-            '<span class="tnum">'+t.numero+'</span>'+
-            (t.transfers>0
-              ?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t('trainsTransfers')(t.transfers)+'</span>'
+            '<span class="tnum">'+tr.numero+'</span>'+
+            (tr.transfers>0
+              ?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t('trainsTransfers')(tr.transfers)+'</span>'
               :'<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">'+t('trainsDirect')+'</span>')+
             '<div style="display:flex;align-items:center;gap:3px;font-size:.62rem;font-family:var(--fm);color:var(--t2)">'+
-            '<div class="rb"><div class="rf" style="width:'+t.fiabilite+'%"></div></div>'+t.fiabilite+'%</div>'+
-            (t.realTime?'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>':'')+
+            '<div class="rb"><div class="rf" style="width:'+tr.fiabilite+'%"></div></div>'+tr.fiabilite+'%</div>'+
+            (tr.realTime?'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>':'')+
             '</div></div>';
         }).join('');
     } else {
@@ -1388,6 +1417,7 @@
 
   /* ─── Analyse principale ──────────────────────────── */
   function analyze() {
+    acClosers.forEach(function(fn) { fn(); });
     var orig=$('orig-inp').value.trim(), dest=$('dest-inp').value.trim();
     if(!orig||!dest) return;
     $('ebox').style.display='none';
@@ -1456,7 +1486,7 @@
         $('score-lbl').style.color=scCol(scoreRes.score);
         $('score-detail').textContent=t('scoreDetail')(scoreRes.score);
 
-        document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+        document.querySelectorAll('.tab').forEach(function(tab){ tab.classList.remove('active'); });
         document.querySelector('.tab[data-tab="overview"]').classList.add('active');
         renderTab('overview');
         show('dash');
@@ -1503,10 +1533,10 @@
       });
     })();
 
-    document.querySelectorAll('.tab').forEach(function(t){
-      t.addEventListener('click', function(){
+    document.querySelectorAll('.tab').forEach(function(tab){
+      tab.addEventListener('click', function(){
         document.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('active'); });
-        t.classList.add('active'); renderTab(t.dataset.tab);
+        tab.classList.add('active'); renderTab(tab.dataset.tab);
       });
     });
 
