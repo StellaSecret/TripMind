@@ -2,10 +2,11 @@
  * api.js — Couche d'accès aux données (TripMind)
  *
  * APIs utilisées (toutes publiques, aucune clé requise sauf Navitia optionnel) :
- *  - Base Adresse Nationale   https://api-adresse.data.gouv.fr
- *  - Open-Meteo (météo)       https://api.open-meteo.com
- *  - Open-Meteo (air/pollen)  https://air-quality-api.open-meteo.com
- *  - OSRM / OpenStreetMap     https://router.project-osrm.org
+ *  - Base Adresse Nationale   https://api-adresse.data.gouv.fr  (France)
+ *  - Nominatim / OSM          https://nominatim.openstreetmap.org (world fallback)
+ *  - Open-Meteo (météo)       https://api.open-meteo.com  (world)
+ *  - Open-Meteo (air/pollen)  https://air-quality-api.open-meteo.com  (world AQ, Europe pollen)
+ *  - OSRM / OpenStreetMap     https://router.project-osrm.org  (world)
  *  - Navitia (trains)         https://api.navitia.io  [token optionnel]
  */
 
@@ -13,6 +14,17 @@
 
 /* ─── Utilitaires ──────────────────────────────────────────── */
 const pad = n => String(n).padStart(2, '0');
+
+/* ─── Helpers géographiques ────────────────────────────────── */
+/** Returns true if coordinates are within metropolitan France */
+export function isInFrance(lat, lon) {
+  return lat >= 41.3 && lat <= 51.1 && lon >= -5.2 && lon <= 9.6;
+}
+
+/** Returns true if coordinates are within Europe (pollen SILAM coverage) */
+export function isInEurope(lat, lon) {
+  return lat >= 34.0 && lat <= 71.0 && lon >= -25.0 && lon <= 45.0;
+}
 
 /** Formate une durée en secondes → "2h05" ou "45 min" */
 export function fmtDur(sec) {
@@ -55,17 +67,16 @@ function reliabilityByMode(m) {
   return 86;
 }
 
-/* ─── Géocodage — Base Adresse Nationale ─────────────────── */
+/* ─── Géocodage — BAN (France) + Nominatim (monde) ──────── */
 /**
- * Géocode une commune française via l'API BAN (data.gouv.fr).
- * @param {string} city  Nom de ville
- * @returns {{ lat, lon, name, dept, postcode }}
+ * Geocodes a city globally:
+ *   1. Tries BAN (France) — best for French cities & train stations
+ *   2. Falls back to Nominatim (OSM) for the rest of the world
+ * @param {string} city
+ * @returns {{ lat, lon, name, dept, postcode, country }}
  */
 export async function geocodeBAN(city) {
-  // Try to find the train station first ("gare de [city]") so that Transitous
-  // snaps to the correct stop. If nothing is found, fall back to the municipality
-  // centroid. Using the municipality centroid for cities like Étampes returns the
-  // town center which is closest to Saint-Martin-d'Étampes stop, not the gare.
+  // ── BAN (France) ──────────────────────────────────────────
   async function fetchBAN(q, type) {
     const url = `https://api-adresse.data.gouv.fr/search/?` +
                 `q=${encodeURIComponent(q)}&limit=1` + (type ? `&type=${type}` : '');
@@ -74,35 +85,62 @@ export async function geocodeBAN(city) {
     return r.json();
   }
 
-  // 1st attempt: search "gare de <city>" as a street/address — returns the station building
-  const dGare = await fetchBAN(`gare de ${city}`);
-  if (dGare.features?.length) {
-    const f = dGare.features[0];
-    // Only accept if it's actually in the right city (avoid false matches)
-    const resultCity = (f.properties.city || f.properties.name || '').toLowerCase();
-    const searchCity = city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const resultCityN = resultCity.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (resultCityN.includes(searchCity) || searchCity.includes(resultCityN.split(' ')[0])) {
+  // Try "gare de <city>" first (snaps Transitous to actual station, avoids
+  // Saint-Martin-d'Étampes problem)
+  try {
+    const dGare = await fetchBAN(`gare de ${city}`);
+    if (dGare.features?.length) {
+      const f = dGare.features[0];
+      const resultCity = (f.properties.city || f.properties.name || '').toLowerCase();
+      const searchCity = city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const resultCityN = resultCity.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (resultCityN.includes(searchCity) || searchCity.includes(resultCityN.split(' ')[0])) {
+        return {
+          lat:      f.geometry.coordinates[1],
+          lon:      f.geometry.coordinates[0],
+          name:     f.properties.city || f.properties.name,
+          dept:     f.properties.context || '',
+          postcode: f.properties.postcode || '',
+          country:  'FR',
+        };
+      }
+    }
+  } catch (_) { /* fall through */ }
+
+  // Try BAN municipality
+  try {
+    const dM = await fetchBAN(city, 'municipality');
+    if (dM.features?.length) {
+      const f = dM.features[0];
       return {
         lat:      f.geometry.coordinates[1],
         lon:      f.geometry.coordinates[0],
         name:     f.properties.city || f.properties.name,
         dept:     f.properties.context || '',
         postcode: f.properties.postcode || '',
+        country:  'FR',
       };
     }
-  }
+  } catch (_) { /* fall through */ }
 
-  // Fallback: municipality centroid
-  const dMunicipality = await fetchBAN(city, 'municipality');
-  if (!dMunicipality.features?.length) throw new Error(`"${city}" introuvable en France`);
-  const f = dMunicipality.features[0];
+  // ── Nominatim (world fallback) ────────────────────────────
+  // Nominatim usage policy: max 1 req/s, must include a descriptive User-Agent.
+  const nomUrl = `https://nominatim.openstreetmap.org/search?` +
+    `q=${encodeURIComponent(city)}&format=json&limit=1&addressdetails=1`;
+  const rN = await fetch(nomUrl, {
+    headers: { 'Accept-Language': 'en', 'User-Agent': 'TripMind/1.0 (trip planning app)' }
+  });
+  if (!rN.ok) throw new Error(`Nominatim HTTP ${rN.status}`);
+  const dN = await rN.json();
+  if (!dN.length) throw new Error(`"${city}" not found`);
+  const n = dN[0];
   return {
-    lat:      f.geometry.coordinates[1],
-    lon:      f.geometry.coordinates[0],
-    name:     f.properties.city || f.properties.name,
-    dept:     f.properties.context || '',
-    postcode: f.properties.postcode || '',
+    lat:      parseFloat(n.lat),
+    lon:      parseFloat(n.lon),
+    name:     n.display_name.split(',')[0].trim(),
+    dept:     n.address?.state || n.address?.county || '',
+    postcode: n.address?.postcode || '',
+    country:  (n.address?.country_code || '').toUpperCase(),
   };
 }
 
@@ -116,7 +154,7 @@ export async function fetchMeteo(lat, lon) {
     `latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,cloud_cover` +
     `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,uv_index_max,precipitation_probability_max` +
-    `&timezone=Europe%2FParis&forecast_days=1`;
+    `&timezone=auto&forecast_days=1`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Open-Meteo météo HTTP ${r.status}`);
   const d = await r.json();
@@ -147,7 +185,7 @@ export async function fetchAirQuality(lat, lon) {
     `latitude=${lat}&longitude=${lon}` +
     `&current=european_aqi,pm10,pm2_5,ozone,nitrogen_dioxide,sulphur_dioxide` +
     `&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen` +
-    `&timezone=Europe%2FParis&forecast_days=1`;
+    `&timezone=auto&forecast_days=1`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Open-Meteo AQ HTTP ${r.status}`);
   const d = await r.json();
@@ -199,7 +237,7 @@ export async function fetchRoute(oLat, oLon, dLat, dLon) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`OSRM HTTP ${r.status}`);
   const d = await r.json();
-  if (!d.routes?.length) throw new Error('Aucun itinéraire routier trouvé');
+  if (!d.routes?.length) throw new Error('No route found');
   const rt = d.routes[0];
   const distM = rt.distance;
   return {
@@ -207,7 +245,7 @@ export async function fetchRoute(oLat, oLon, dLat, dLon) {
     dist:   distM >= 1000 ? `${Math.round(distM / 1000)} km` : `${Math.round(distM)} m`,
     dur:    fmtDur(rt.duration),
     durSec: rt.duration,
-    note:   'Durée théorique sans trafic (OSRM / OpenStreetMap)',
+    note:   'OSRM',
   };
 }
 

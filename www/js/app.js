@@ -84,10 +84,10 @@
       /* AQI */
       aqiTresBon: 'Très bon', aqiBon: 'Bon', aqiSat: 'Satisfaisant', aqiMed: 'Médiocre',
       aqiMauvais: 'Mauvais', aqiTresMauvais: 'Très mauvais',
-      aqiLabel: 'Indice AQI européen', aqiCurrent: ' · Actuel', aqiForecast: ' · Prévision',
+      aqiLabel: 'Indice AQI européen', aqiLabelUS: 'Indice AQI (US)', aqiCurrent: ' · Actuel', aqiForecast: ' · Prévision',
       /* Pollen */
       pollenFaible: 'Faible', pollenModere: 'Modéré', pollenEleve: 'Élevé', pollenTresEleve: 'Très élevé',
-      pollenNA: 'Données indisponibles', pollenNone: '✓ Aucun pollen significatif',
+      pollenNA: 'Données indisponibles', pollenNoData: '⚠️ Données pollen indisponibles hors Europe (modèle SILAM)', pollenNone: '✓ Aucun pollen significatif',
       pollenUnit: 'grain/m³ max',
       pollenNames: { Aulne: 'Aulne', Bouleau: 'Bouleau', Graminées: 'Graminées', Armoise: 'Armoise', Olivier: 'Olivier' },
       /* Route */
@@ -236,10 +236,10 @@
       /* AQI */
       aqiTresBon: 'Very good', aqiBon: 'Good', aqiSat: 'Fair', aqiMed: 'Moderate',
       aqiMauvais: 'Poor', aqiTresMauvais: 'Very poor',
-      aqiLabel: 'European AQI index', aqiCurrent: ' · Current', aqiForecast: ' · Forecast',
+      aqiLabel: 'European AQI index', aqiLabelUS: 'US AQI index', aqiCurrent: ' · Current', aqiForecast: ' · Forecast',
       /* Pollen */
       pollenFaible: 'Low', pollenModere: 'Moderate', pollenEleve: 'High', pollenTresEleve: 'Very high',
-      pollenNA: 'Data unavailable', pollenNone: '✓ No significant pollen',
+      pollenNA: 'Data unavailable', pollenNoData: '⚠️ Pollen data unavailable outside Europe (SILAM model)', pollenNone: '✓ No significant pollen',
       pollenUnit: 'grain/m³ max',
       pollenNames: { Aulne: 'Alder', Bouleau: 'Birch', Graminées: 'Grass', Armoise: 'Mugwort', Olivier: 'Olive' },
       /* Route */
@@ -478,6 +478,14 @@
   var acTimers = {};
   var acClosers = []; // registered by each setupAutocomplete instance
 
+  /* ─── Helpers géographiques ───────────────────────── */
+  function isInFrance(lat, lon) {
+    return lat >= 41.3 && lat <= 51.1 && lon >= -5.2 && lon <= 9.6;
+  }
+  function isInEurope(lat, lon) {
+    return lat >= 34.0 && lat <= 71.0 && lon >= -25.0 && lon <= 45.0;
+  }
+
   function setupAutocomplete(inputId, listId) {
     var inp = $(inputId), list = $(listId);
     if (!inp || !list) return;
@@ -566,18 +574,50 @@
     });
   }
 
-  /* ─── API : Géocodage BAN ────────────────────────── */
+  /* ─── API : Géocodage BAN + Nominatim (monde) ───── */
   function geocodeBAN(city) {
+    // 1. Try BAN (France) — best accuracy for French cities & train stations
     return fetch('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(city) +
-                 '&limit=1')
+                 '&type=municipality&limit=1&autocomplete=1')
       .then(function(r) { if (!r.ok) throw new Error('BAN HTTP ' + r.status); return r.json(); })
       .then(function(d) {
-        if (!d.features || !d.features.length) throw new Error('"' + city + '" introuvable en France');
-        var f = d.features[0];
-        return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
-                 name: f.properties.city || f.properties.name,
-                 label: f.properties.label || f.properties.name,
-                 dept: (f.properties.context || '').split(',')[0] };
+        if (d.features && d.features.length) {
+          var f = d.features[0];
+          return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
+                   name: f.properties.city || f.properties.name,
+                   label: f.properties.label || f.properties.name,
+                   dept: (f.properties.context || '').split(',')[0],
+                   country: 'FR' };
+        }
+        // 2. Nominatim (OpenStreetMap) — global fallback with 5s timeout
+        // If Nominatim is unreachable (CI network block, test mock), fails gracefully.
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var nomTimer = ctrl ? setTimeout(function() { ctrl.abort(); }, 5000) : null;
+        return fetch('https://nominatim.openstreetmap.org/search?q=' +
+                     encodeURIComponent(city) + '&format=json&limit=1&addressdetails=1',
+                     { headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0' },
+                       signal: ctrl ? ctrl.signal : undefined })
+          .then(function(r2) {
+            if (nomTimer) clearTimeout(nomTimer);
+            if (!r2.ok) throw new Error('Nominatim HTTP ' + r2.status);
+            return r2.json();
+          })
+          .then(function(dN) {
+            if (!dN || !dN.length) throw new Error('"' + city + '" introuvable');
+            var n = dN[0];
+            return {
+              lat:     parseFloat(n.lat),
+              lon:     parseFloat(n.lon),
+              name:    (n.display_name || city).split(',')[0].trim(),
+              label:   (n.display_name || city).split(',')[0].trim(),
+              dept:    (n.address && (n.address.state || n.address.county)) || '',
+              country: ((n.address && n.address.country_code) || '').toUpperCase()
+            };
+          })
+          .catch(function(e) {
+            if (nomTimer) clearTimeout(nomTimer);
+            throw new Error('"' + city + '" introuvable');
+          });
       });
   }
 
@@ -609,7 +649,7 @@
       'latitude=' + lat + '&longitude=' + lon +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,cloud_cover' +
       '&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,weather_code,wind_speed_10m_max' +
-      '&timezone=Europe%2FParis&forecast_days=16';
+      '&timezone=auto&forecast_days=16';
 
     return fetch(url)
       .then(function(r) { if (!r.ok) throw new Error((LANG==='en'?'Weather HTTP ':'Météo HTTP ') + r.status); return r.json(); })
@@ -651,17 +691,23 @@
    * Pour les jours futurs, on prend l'heure 12:00 du jour voulu
    * dans les données horaires (index = offset * 24 + 12).
    ──────────────────────────────────────────────────── */
-  function fetchAirQuality(lat, lon) {
+  function fetchAirQuality(lat, lon, inEurope) {
     var offset = dayOffset();
+    var inEU = (inEurope !== false) && isInEurope(lat, lon);
 
-    // Open-Meteo AQ : polluants fiables sur ~5 jours (120h), pollens sur ~5 jours aussi.
-    // On demande 6 jours pour couvrir J+5 avec marge, pas 16 (données absentes au-delà).
+    // Choose AQI index: European EAQI inside Europe, US AQI elsewhere
+    var aqiVar = inEU ? 'european_aqi' : 'us_aqi';
+
+    // Pollen (SILAM model) only available in Europe
+    var pollenVars = inEU
+      ? ',alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen'
+      : '';
+
     var forecastDays = Math.min(offset + 2, 6);
     var url = 'https://air-quality-api.open-meteo.com/v1/air-quality?' +
       'latitude=' + lat + '&longitude=' + lon +
-      '&hourly=european_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,' +
-      'alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen' +
-      '&timezone=Europe%2FParis&forecast_days=' + forecastDays;
+      '&hourly=' + aqiVar + ',pm2_5,pm10,nitrogen_dioxide,ozone' + pollenVars +
+      '&timezone=auto&forecast_days=' + forecastDays;
 
     return fetch(url)
       .then(function(r) { if (!r.ok) throw new Error('AQI HTTP ' + r.status); return r.json(); })
@@ -683,49 +729,54 @@
 
         // Index horaire cible : heure actuelle pour J+0, midi pour les autres
         var hi = offset === 0
-          ? Math.min(new Date().getHours(), (h.european_aqi || []).length - 1)
-          : Math.min(offset * 24 + 12, (h.european_aqi || []).length - 1);
+          ? Math.min(new Date().getHours(), (h[aqiVar] || []).length - 1)
+          : Math.min(offset * 24 + 12, (h[aqiVar] || []).length - 1);
 
         // Si l'index dépasse le tableau (données non disponibles pour ce jour),
         // prendre le dernier index disponible avec un flag d'avertissement
-        var maxIdx = (h.european_aqi || []).length - 1;
+        var maxIdx = (h[aqiVar] || []).length - 1;
         var outOfRange = hi > maxIdx;
         hi = Math.max(0, Math.min(hi, maxIdx));
 
-        var aqi  = safeRound(h.european_aqi, hi);
+        var aqi  = safeRound(h[aqiVar], hi);
         var pm25 = safeFix(h.pm2_5, hi);
         var pm10 = safeFix(h.pm10, hi);
         var no2  = safeFix(h.nitrogen_dioxide, hi);
         var o3   = safeFix(h.ozone, hi);
 
         var pn = t('pollenNames');
-        var pollens = {};
-        pollens[pn.Aulne]     = safeRound(h.alder_pollen, hi)  || 0;
-        pollens[pn.Bouleau]   = safeRound(h.birch_pollen, hi)  || 0;
-        pollens[pn.Graminées] = safeRound(h.grass_pollen, hi)  || 0;
-        pollens[pn.Armoise]   = safeRound(h.mugwort_pollen, hi)|| 0;
-        pollens[pn.Olivier]   = safeRound(h.olive_pollen, hi)  || 0;
+        var pollens = {}, polMax = 0, polActifs = [], polNiveau = {l:t('pollenNA'),c:'bb'};
+        var pollenNotAvailable = !inEU; // pollen data only in Europe
 
-        var polMax = Math.max.apply(null, Object.values(pollens));
-        var polActifs = Object.keys(pollens).filter(function(k) { return pollens[k] > 2; });
-        var polNiveau = outOfRange
-          ? {l:t('pollenNA'),c:'bb'}
-          : polMax < 10  ? {l:t('pollenFaible'),c:'bg'}
-          : polMax < 50  ? {l:t('pollenModere'),c:'ba'}
-          : polMax < 200 ? {l:t('pollenEleve'),c:'ba'}
-          :                {l:t('pollenTresEleve'),c:'br'};
+        if (inEU && h.alder_pollen) {
+          pollens[pn.Aulne]     = safeRound(h.alder_pollen, hi)  || 0;
+          pollens[pn.Bouleau]   = safeRound(h.birch_pollen, hi)  || 0;
+          pollens[pn.Graminées] = safeRound(h.grass_pollen, hi)  || 0;
+          pollens[pn.Armoise]   = safeRound(h.mugwort_pollen, hi)|| 0;
+          pollens[pn.Olivier]   = safeRound(h.olive_pollen, hi)  || 0;
+          polMax = Math.max.apply(null, Object.values(pollens));
+          polActifs = Object.keys(pollens).filter(function(k) { return pollens[k] > 2; });
+          polNiveau = outOfRange
+            ? {l:t('pollenNA'),c:'bb'}
+            : polMax < 10  ? {l:t('pollenFaible'),c:'bg'}
+            : polMax < 50  ? {l:t('pollenModere'),c:'ba'}
+            : polMax < 200 ? {l:t('pollenEleve'),c:'ba'}
+            :                {l:t('pollenTresEleve'),c:'br'};
+        }
 
         return {
           aqi: outOfRange ? null : aqi,
+          aqiType: inEU ? 'EU' : 'US',
           pm25: outOfRange ? null : pm25,
           pm10: outOfRange ? null : pm10,
           o3: outOfRange ? null : o3,
           no2: outOfRange ? null : no2,
-          pollens: outOfRange ? {} : pollens,
-          polMax: outOfRange ? 0 : polMax,
-          polActifs: outOfRange ? [] : polActifs,
+          pollens: (outOfRange || pollenNotAvailable) ? {} : pollens,
+          polMax: (outOfRange || pollenNotAvailable) ? 0 : polMax,
+          polActifs: (outOfRange || pollenNotAvailable) ? [] : polActifs,
           polNiveau: polNiveau,
-          outOfRange: outOfRange
+          outOfRange: outOfRange,
+          pollenNotAvailable: pollenNotAvailable
         };
       });
   }
@@ -1182,7 +1233,7 @@
         : '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'+
           '<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:800;font-family:var(--fm);flex-shrink:0" class="'+aqI.c+'">'+aq.aqi+'</div>'+
           '<div><div style="font-weight:700;font-size:.85rem">'+aqI.l+'</div>'+
-          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t('aqiLabel')+(m.isForecast?t('aqiForecast'):t('aqiCurrent'))+'</div></div>'+
+          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+(aq.aqiType==='US'?t('aqiLabelUS'):t('aqiLabel'))+(m.isForecast?t('aqiForecast'):t('aqiCurrent'))+'</div></div>'+
           '<span class="badge '+aqI.c+'" style="margin-left:auto">'+aqI.l+'</span></div>'+
           '<div class="wg">'+
           (aq.pm25!=null?'<div class="wstat"><div class="wsl">PM₂.₅</div><div class="wsv" style="font-size:.78rem">'+aq.pm25+' μg/m³</div></div>':'')+
@@ -1290,7 +1341,7 @@
         ? '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'+
           '<div style="width:44px;height:44px;border-radius:50%;border:2.5px solid;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:800;font-family:var(--fm);flex-shrink:0" class="'+aqI.c+'">'+aq.aqi+'</div>'+
           '<div><div style="font-weight:700;font-size:.85rem">'+aqI.l+'</div>'+
-          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+t('aqiLabel')+'</div></div>'+
+          '<div style="font-size:.62rem;color:var(--t3);font-family:var(--fm)">'+(aq.aqiType==='US'?t('aqiLabelUS'):t('aqiLabel'))+'</div></div>'+
           '<span class="badge '+aqI.c+'" style="margin-left:auto">'+aqI.l+'</span></div>'
         : '')+
       polluantsHTML+'</div></div>'
@@ -1437,7 +1488,7 @@
       .then(function(ctx){
         setStep('s2','loading'); setStep('s3','loading');
         $('lmsg').textContent=t('loadingAir');
-        return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon)
+        return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon, isInEurope(ctx.dGeo.lat, ctx.dGeo.lon))
           .then(function(aq){ setStep('s2','done'); setStep('s3','done'); ctx.aq=aq; return ctx; })
           .catch(function(){
             setStep('s2','fail'); setStep('s3','fail');

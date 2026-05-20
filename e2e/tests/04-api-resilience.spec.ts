@@ -99,6 +99,7 @@ test.describe('API resilience', () => {
 
   test('BAN empty features — shows error, not crash', async ({ page }) => {
     await page.route(/api-adresse\.data\.gouv\.fr/, r => r.fulfill({ json: { features: [] } }));
+    await page.route(/nominatim\.openstreetmap\.org/, r => r.fulfill({ json: [] }));
     await gotoSearch(page);
     await fillAndClick(page);
     await waitForExitLoading(page, 12_000);
