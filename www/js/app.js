@@ -788,9 +788,7 @@
   function isoToHHMM(iso) {
     if (!iso) return '--:--';
     var d = new Date(iso);
-    // Transitous/MOTIS returns local times with a Z suffix (treats them as UTC)
-    // so we read with UTC getters to get the correct displayed time
-    return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
   /* Parse une réponse MOTIS v1 (Transitous).
@@ -1194,7 +1192,7 @@
 
       '<div class="card"><div class="ch"><span class="ct">'+t('recoCardTitle')+'</span></div><div class="cb">'+
       '<div class="rcard"><div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'+
-      '<span>🎯</span><span style="font-size:.78rem;font-weight:700;color:var(--cyan)">Conditions de trajet</span></div>'+
+      '<span>🎯</span><span style="font-size:.78rem;font-weight:700;color:var(--cyan)">'+t('recoTitle')+'</span></div>'+
       '<div class="rtime">'+reco.cond+'</div>'+
       '<div class="rtxt">'+(rt?t('recoCarNote')(rt.dur,rt.dist):t('recoNA'))+'</div></div>'+
       (reco.al.length?reco.al.map(function(a){return '<div class="ai"><span>⚠️</span><span class="at">'+a+'</span></div>';}).join(''):
@@ -1318,7 +1316,7 @@
       '<div class="card"><div class="ch"><span class="ct">'+t('santeTitle')+'</span></div><div class="cb">'+
       '<div class="hgrid">'+
       '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🤧</div><div class="hl">'+t('pollenLabel')+'</div><span class="badge '+po.c+'" style="margin-top:3px;display:inline-flex">'+po.l+'</span></div>'+
-      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">😷</div><div class="hl">'+t('masqueLabel')+'</div><div style="font-size:.82rem;font-weight:700;color:'+(masque?'#EF4444':'#10B981')+';margin-top:3px">'+(masque?'Recommandé':'Non nécessaire')+'</div></div>'+
+      '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">😷</div><div class="hl">'+t('masqueLabel')+'</div><div style="font-size:.82rem;font-weight:700;color:'+(masque?'#EF4444':'#10B981')+';margin-top:3px">'+(masque?t('masqueYes'):t('masqueNo'))+'</div></div>'+
       '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">☀️</div><div class="hl">'+t('uvLabel')+'</div><div style="font-size:.82rem;font-weight:700;color:'+uv.c+';margin-top:3px">'+m.uv+'/11 — '+uv.l+'</div></div>'+
       '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">🏃</div><div class="hl">'+t('actExtLabel')+'</div><span class="badge '+bcls(actExt)+'" style="margin-top:3px;display:inline-flex">'+actExt+'</span></div>'+
       '<div class="ht"><div style="font-size:1.2rem;margin-bottom:4px">💨</div><div class="hl">'+t('airQualLabel')+'</div><span class="badge '+aqI.c+'" style="margin-top:3px;display:inline-flex">'+aqI.l+'</span></div>'+
@@ -1349,8 +1347,7 @@
     } else if (trains._empty) {
       tH='<div class="ai"><span>ℹ️</span><span class="at">'+t('trainsEmpty')(off,dateLabel(selectedDate))+'</span></div>';
     } else if (trains.trains && trains.trains.length) {
-      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">📅 Trains du '+
-          dateLabel(selectedDate)+' à partir de 08h00</div>':'')+
+      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">'+t('trainsFuture')(dateLabel(selectedDate))+'</div>':'')+
         trains.trains.map(function(tr,i){
           return '<div class="tc">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
@@ -1506,6 +1503,8 @@
 
     setupAutocomplete('orig-inp','orig-ac');
     setupAutocomplete('dest-inp','dest-ac');
+    // Apply initial language to all static strings
+    var _ss=$('score-subtitle'); if(_ss) _ss.textContent=t('scoreSubtitle');
 
     /* ─── THÈME CLAIR / SOMBRE ────────────────────────── */
     (function() {
@@ -1545,7 +1544,7 @@
     });
 
     var backBtn=$('back-btn');
-    if(backBtn) backBtn.addEventListener('click', function(e){ e.preventDefault(); show('search'); });
+    if(backBtn) { backBtn.addEventListener('click', function(e){ e.preventDefault(); show('search'); }); backBtn.textContent = t('backBtn'); }
 
     var settingsIcon=$('settings-icon');
     if(settingsIcon) settingsIcon.addEventListener('click', function(){ show('settings'); });
@@ -1608,8 +1607,8 @@
         }
       }
       btn.addEventListener('click', function() { applyLang(LANG === 'fr' ? 'en' : 'fr'); });
-      // Apply on first load to set button label
-      btn.textContent = t('langToggleLabel');
+      // Apply on first load to set all static strings correctly
+      applyLang(LANG);
     })();
 
     $('analyze-btn').addEventListener('click', analyze);
