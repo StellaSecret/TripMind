@@ -126,15 +126,15 @@ a{color:var(--blue)}
 .settings-header{display:flex;align-items:center;gap:12px;margin-bottom:1.5rem}
 .back-icon-btn{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:7px 12px;font-size:.78rem;color:var(--t2);cursor:pointer;font-family:var(--fn)}
 .settings-title{font-size:1.1rem;font-weight:700}
-.navitia-card{background:var(--bg1);border:1px solid var(--bd2);border-radius:16px;padding:1.4rem;margin-bottom:1rem}
-.navitia-header{display:flex;align-items:center;gap:10px;margin-bottom:1rem}
-.navitia-logo{width:36px;height:36px;background:#6366f1;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px}
-.navitia-name{font-size:.9rem;font-weight:700}
-.navitia-sub{font-size:.65rem;color:var(--em);font-family:var(--fm)}
-.navitia-steps{font-size:.72rem;color:var(--t2);line-height:1.7;margin-bottom:1rem}
-.navitia-step{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
+.transitous-card{background:var(--bg1);border:1px solid var(--bd2);border-radius:16px;padding:1.4rem;margin-bottom:1rem}
+.transitous-header{display:flex;align-items:center;gap:10px;margin-bottom:1rem}
+.transitous-logo{width:36px;height:36px;background:#6366f1;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.transitous-name{font-size:.9rem;font-weight:700}
+.transitous-sub{font-size:.65rem;color:var(--em);font-family:var(--fm)}
+.transitous-steps{font-size:.72rem;color:var(--t2);line-height:1.7;margin-bottom:1rem}
+.transitous-step{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
 .step-num{width:18px;height:18px;background:var(--blue);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:800;color:white;flex-shrink:0}
-.navitia-link{display:inline-block;background:linear-gradient(135deg,#6366f1,#4f46e5);border:none;border-radius:9px;padding:9px 14px;font-size:.75rem;font-weight:700;font-family:var(--fn);color:white;text-decoration:none;margin-bottom:1rem}
+.transitous-link{display:inline-block;background:linear-gradient(135deg,#6366f1,#4f46e5);border:none;border-radius:9px;padding:9px 14px;font-size:.75rem;font-weight:700;font-family:var(--fn);color:white;text-decoration:none;margin-bottom:1rem}
 .token-label{font-size:.62rem;font-family:var(--fm);color:var(--t3);text-transform:uppercase;letter-spacing:2px;margin-bottom:5px;display:block}
 .token-input{width:100%;background:var(--bg2);border:1px solid var(--bd);border-radius:9px;padding:10px 12px;font-size:.82rem;font-family:var(--fm);color:var(--t1);outline:none;transition:border-color .2s;margin-bottom:10px}
 .token-input:focus{border-color:#6366f1}
@@ -256,8 +256,8 @@ a{color:var(--blue)}
 .tn-icon{font-size:1.6rem;margin-bottom:6px}
 .tn-ttl{font-size:.82rem;font-weight:700;margin-bottom:5px}
 .tn-txt{font-size:.72rem;color:var(--t2);line-height:1.5;margin-bottom:10px}
-.navitia-goto-btn{background:none;border:1px solid var(--bd);border-radius:8px;padding:7px 12px;font-size:.72rem;color:var(--t2);cursor:pointer;font-family:var(--fn);margin-top:8px;display:block;margin:0 auto}
-.navitia-goto-btn:hover{background:var(--bg3)}
+.transitous-goto-btn{background:none;border:1px solid var(--bd);border-radius:8px;padding:7px 12px;font-size:.72rem;color:var(--t2);cursor:pointer;font-family:var(--fn);margin-top:8px;display:block;margin:0 auto}
+.transitous-goto-btn:hover{background:var(--bg3)}
 
 /* ── Info note ──────────────────────────────────────── */
 .info-note{padding:7px 9px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:7px;font-size:.65rem;color:var(--amber);font-family:var(--fm);margin-top:8px}

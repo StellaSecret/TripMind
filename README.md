@@ -44,7 +44,6 @@ L'APK est généré dans `android/app/build/outputs/apk/debug/app-debug.apk`.
 TripMind utilise [Transitous](https://transitous.org), un routeur de transport public open source basé sur le moteur [MOTIS 2](https://github.com/motis-project/motis) et des données GTFS ouvertes, dont les données SNCF France.
 
 **Pourquoi Transitous plutôt que l'API SNCF officielle ?**
-- Navitia.io : inscriptions publiques fermées depuis fin 2023
 - API SNCF officielle (`api.sncf.com`) : le support ne répond plus aux inscriptions individuelles
 - Transitous : aucun compte, aucun token, couverture France complète
 

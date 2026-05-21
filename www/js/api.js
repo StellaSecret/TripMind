@@ -1,13 +1,12 @@
 /**
  * api.js — Couche d'accès aux données (TripMind)
  *
- * APIs utilisées (toutes publiques, aucune clé requise sauf Navitia optionnel) :
+ * APIs utilisées (toutes publiques, aucune clé requise) :
  *  - Base Adresse Nationale   https://api-adresse.data.gouv.fr  (France)
  *  - Nominatim / OSM          https://nominatim.openstreetmap.org (world fallback)
  *  - Open-Meteo (météo)       https://api.open-meteo.com  (world)
  *  - Open-Meteo (air/pollen)  https://air-quality-api.open-meteo.com  (world AQ, Europe pollen)
  *  - OSRM / OpenStreetMap     https://router.project-osrm.org  (world)
- *  - Navitia (trains)         https://api.navitia.io  [token optionnel]
  */
 
 'use strict';
@@ -32,19 +31,6 @@ export function fmtDur(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   return h > 0 ? `${h}h${pad(m)}` : `${m} min`;
-}
-
-/** Extrait HH:MM depuis le format Navitia "20240612T143000" */
-function fmtNavitiaTime(dt) {
-  if (!dt || dt.length < 13) return '--:--';
-  return `${dt.substring(9, 11)}:${dt.substring(11, 13)}`;
-}
-
-/** Génère le datetime courant au format Navitia */
-function nowNavitia() {
-  const d = new Date();
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
-         `T${pad(d.getHours())}${pad(d.getMinutes())}00`;
 }
 
 function shortMode(m) {
@@ -247,79 +233,4 @@ export async function fetchRoute(oLat, oLon, dLat, dLon) {
     durSec: rt.duration,
     note:   'OSRM',
   };
-}
-
-/* ─── Trains — Navitia ────────────────────────────────────── */
-/**
- * Récupère les prochains trains via l'API Navitia (gratuit, inscription requise).
- * @param {string|null} token  Token Navitia (null → retourne { _nk: true })
- * @returns {{ trains: Array, _nk?: boolean, _err?: string, _empty?: boolean }}
- */
-export async function fetchTrains(oLat, oLon, dLat, dLon, token) {
-  if (!token) return { _nk: true, trains: [] };
-
-  const url = `https://api.navitia.io/v1/journeys?` +
-    `from=${oLon};${oLat}&to=${dLon};${dLat}` +
-    `&datetime=${nowNavitia()}&count=5&min_nb_journeys=1`;
-
-  let r;
-  try {
-    r = await fetch(url, {
-      headers: { Authorization: 'Basic ' + btoa(token + ':') },
-    });
-  } catch (e) {
-    return { _err: `Réseau : ${e.message}`, trains: [] };
-  }
-
-  if (r.status === 401) return { _err: 'Token Navitia invalide (401)', trains: [] };
-  if (r.status === 404) return { _empty: true, trains: [] };
-  if (!r.ok)            return { _err: `Navitia HTTP ${r.status}`, trains: [] };
-
-  const d = await r.json();
-
-  // Filtrer uniquement les trajets avec transport ferroviaire/bus
-  const journeys = (d.journeys || [])
-    .filter(j => j.sections?.some(s => s.type === 'public_transport'))
-    .slice(0, 3);
-
-  if (!journeys.length) return { _empty: true, trains: [] };
-
-  const trains = journeys.map(j => {
-    const pt = j.sections.filter(s => s.type === 'public_transport');
-    const first = pt[0];
-    const mode = first?.display_informations?.commercial_mode || 'Train';
-    const num  = (first?.display_informations?.headsign || first?.display_informations?.label || '').trim();
-    const line = first?.display_informations?.network || '';
-
-    return {
-      depart:    fmtNavitiaTime(j.departure_date_time),
-      arrivee:   fmtNavitiaTime(j.arrival_date_time),
-      duree:     fmtDur(j.duration),
-      numero:    `${shortMode(mode)}${num ? ' ' + num : ''}`,
-      reseau:    line,
-      transfers: j.nb_transfers || 0,
-      fiabilite: reliabilityByMode(mode),
-      statut:    j.status || 'NO_SERVICE',
-    };
-  });
-
-  return { trains };
-}
-
-/**
- * Teste la validité d'un token Navitia (appel léger).
- * @returns {{ ok: boolean, message: string }}
- */
-export async function testNavitiaToken(token) {
-  if (!token?.trim()) return { ok: false, message: 'Token vide' };
-  try {
-    const r = await fetch('https://api.navitia.io/v1/', {
-      headers: { Authorization: 'Basic ' + btoa(token.trim() + ':') },
-    });
-    if (r.status === 401) return { ok: false, message: 'Token invalide (401 Unauthorized)' };
-    if (!r.ok)            return { ok: false, message: `Erreur HTTP ${r.status}` };
-    return { ok: true, message: 'Token valide ✓' };
-  } catch (e) {
-    return { ok: false, message: `Erreur réseau : ${e.message}` };
-  }
 }

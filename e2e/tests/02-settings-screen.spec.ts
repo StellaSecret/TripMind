@@ -18,19 +18,19 @@ test.describe('Settings screen — data sources', () => {
   });
 
   test('Transitous card name contains "Transitous"', async ({ page }) => {
-    await expect(page.locator('.navitia-name')).toContainText('Transitous');
+    await expect(page.locator('.transitous-name')).toContainText('Transitous');
   });
 
   test('Transitous card subtitle says "Aucun token"', async ({ page }) => {
-    await expect(page.locator('.navitia-sub')).toContainText('Aucun token');
+    await expect(page.locator('.transitous-sub')).toContainText('Aucun token');
   });
 
   test('Transitous link points to transitous.org', async ({ page }) => {
-    await expect(page.locator('.navitia-link')).toHaveAttribute('href', 'https://transitous.org');
+    await expect(page.locator('.transitous-link')).toHaveAttribute('href', 'https://transitous.org');
   });
 
   test('Transitous link opens in a new tab', async ({ page }) => {
-    await expect(page.locator('.navitia-link')).toHaveAttribute('target', '_blank');
+    await expect(page.locator('.transitous-link')).toHaveAttribute('target', '_blank');
   });
 
   test('free APIs card has exactly 6 rows', async ({ page }) => {
