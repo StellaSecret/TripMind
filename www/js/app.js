@@ -521,38 +521,97 @@
       items.forEach(function(it) { it.classList.remove('selected'); });
       if (idx >= 0 && idx < items.length) items[idx].classList.add('selected');
     }
+    /* Fetch autocomplete suggestions:
+     * 1. BAN (France) — fast, high quality for French cities & addresses
+     * 2. Nominatim (OSM) — global fallback when BAN returns < 2 results
+     * Both results are merged and deduplicated before display.
+     */
+    function fetchNominatimAC(q) {
+      var url = 'https://nominatim.openstreetmap.org/search?q=' +
+                encodeURIComponent(q) +
+                '&format=json&limit=5&addressdetails=1&featuretype=city';
+      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, 4000) : null;
+      return fetch(url, {
+        headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0' },
+        signal: ctrl ? ctrl.signal : undefined
+      })
+      .then(function(r) {
+        if (timer) clearTimeout(timer);
+        return r.json();
+      })
+      .then(function(results) {
+        // Normalise Nominatim results into BAN-shaped GeoJSON features
+        return (results || []).map(function(n) {
+          var city = (n.address && (n.address.city || n.address.town ||
+                      n.address.village || n.address.county)) || n.display_name.split(',')[0];
+          var country = (n.address && n.address.country) || '';
+          var state   = (n.address && (n.address.state || n.address.county)) || '';
+          var label   = city + (country ? ', ' + country : '');
+          return {
+            geometry:   { coordinates: [parseFloat(n.lon), parseFloat(n.lat)] },
+            properties: {
+              label:   label,
+              city:    city,
+              name:    city,
+              context: state + (country ? (state ? ', ' : '') + country : ''),
+              type:    n.type || 'city',
+              _nominatim: true
+            }
+          };
+        });
+      })
+      .catch(function() { return []; });
+    }
+
     inp.addEventListener('input', function() {
       var q = inp.value.trim();
       clearTimeout(acTimers[inputId]);
       if (q.length < 2) { closeList(); return; }
       acTimers[inputId] = setTimeout(function() {
-        var base = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) + '&autocomplete=1';
-        // Fetch municipalities (type=municipality) with autocomplete=1.
-        // For short queries that return nothing, try type=locality (hamlets, suburbs)
-        // then finally unrestricted but limited to avoid noisy address results.
-        fetch(base + '&type=municipality&limit=6')
+        var banBase = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) + '&autocomplete=1';
+
+        // Run BAN (municipality) and Nominatim in parallel
+        // For short queries: municipality only (fast city lookup).
+        // For longer queries that look like addresses (contain digits or spaces+words):
+        // also fetch housenumber results so full addresses appear.
+        var looksLikeAddress = q.length >= 5 && /\d/.test(q);
+        var banMunicipalityP = fetch(banBase + '&type=municipality&limit=4')
           .then(function(r) { return r.json(); })
-          .then(function(d) {
-            var features = d.features || [];
-            if (features.length) { renderList(features); return; }
-            return fetch(base + '&type=locality&limit=6')
-              .then(function(r2) { return r2.json(); })
-              .then(function(d2) {
-                var f2 = d2.features || [];
-                if (f2.length) { renderList(f2); return; }
-                // Last resort: unrestricted but filter to city-like results only
-                return fetch(base + '&limit=8')
-                  .then(function(r3) { return r3.json(); })
-                  .then(function(d3) {
-                    var cityTypes = ['municipality','locality','city'];
-                    var filtered = (d3.features || []).filter(function(f) {
-                      return cityTypes.indexOf(f.properties.type) >= 0;
-                    });
-                    renderList(filtered.length ? filtered : (d3.features || []).slice(0,5));
-                  });
-              });
-          })
-          .catch(function() { closeList(); });
+          .then(function(d) { return d.features || []; })
+          .catch(function() { return []; });
+        var banAddressP = looksLikeAddress
+          ? fetch(banBase + '&type=housenumber&limit=5')
+              .then(function(r) { return r.json(); })
+              .then(function(d) { return d.features || []; })
+              .catch(function() { return []; })
+          : Promise.resolve([]);
+        var banP = Promise.all([banMunicipalityP, banAddressP]).then(function(r) {
+          return r[0].concat(r[1]);
+        });
+
+        var nomP = fetchNominatimAC(q);
+
+        Promise.all([banP, nomP]).then(function(results) {
+          var banFeatures = results[0];
+          var nomFeatures = results[1];
+
+          // Use BAN results first; supplement with Nominatim for non-French results
+          // Deduplicate by normalised city name
+          var seen = {};
+          var merged = [];
+          banFeatures.forEach(function(f) {
+            // Deduplicate by full label (address) not just city name
+            var key = (f.properties.label || f.properties.name || '').toLowerCase().trim();
+            if (key && !seen[key]) { seen[key] = true; merged.push(f); }
+          });
+          nomFeatures.forEach(function(f) {
+            var key = (f.properties.label || f.properties.name || '').toLowerCase().trim();
+            if (key && !seen[key]) { seen[key] = true; merged.push(f); }
+          });
+
+          renderList(merged.slice(0, 7));
+        }).catch(function() { closeList(); });
       }, 150);
     });
     inp.addEventListener('keydown', function(e) {
