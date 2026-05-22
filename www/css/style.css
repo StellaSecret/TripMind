@@ -361,3 +361,20 @@ a{color:var(--blue)}
   font-family: var(--fm);
   color: #A78BFA;
 }
+
+
+/* ─── Time picker ─────────────────────────────────────── */
+.time-section{margin:6px 0 10px;animation:fadeIn .2s}
+.time-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.time-chip{padding:5px 12px;border-radius:20px;border:1px solid var(--bd);
+  background:var(--bg2);color:var(--t2);font-size:.72rem;font-family:var(--fm);
+  cursor:pointer;transition:all .15s}
+.time-chip:hover{border-color:var(--cyan);color:var(--cyan)}
+.time-chip.active{background:rgba(6,182,212,.15);border-color:var(--cyan);
+  color:var(--cyan);font-weight:700}
+
+/* ─── Cache hit badge ─────────────────────────────────── */
+.cache-badge{display:inline-flex;align-items:center;gap:4px;
+  font-size:.6rem;font-family:var(--fm);color:var(--em);
+  background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);
+  border-radius:6px;padding:2px 7px;margin-left:8px;vertical-align:middle}

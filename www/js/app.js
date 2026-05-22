@@ -112,8 +112,8 @@
       trainsLoading: 'Chargement des trains…',
       trainsOverloadNote: 'Transitous est un service communautaire bénévole à ressources limitées. Les 500/504 indiquent une surcharge temporaire — les données de trains seront disponibles dans quelques minutes.',
       trainsErrNote: 'En cas de panne persistante, consultez directement SNCF Connect.',
-      trainsEmpty: function(off, label) { return 'Aucun trajet en transport commun trouvé'+(off>0?' pour le '+label+' à partir de 08h00':'')+". Cette liaison n'est peut-être pas desservie par train direct."; },
-      trainsFuture: function(label) { return '📅 Trains du '+label+' à partir de 08h00'; },
+      trainsEmpty: function(off, label, hour) { return 'Aucun trajet en transport commun trouvé'+(off>0?' pour le '+label+' à partir de '+(hour||'08')+'h00':'')+". Cette liaison n'est peut-être pas desservie par train direct."; },
+      trainsFuture: function(label, hour) { return '📅 Trains du '+label+' à partir de '+(hour||'08')+'h00'; },
       trainsDep: 'Dép.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' corresp.'; },
       trainsRealtime: '🟢 Temps réel',
@@ -264,8 +264,8 @@
       trainsLoading: 'Loading trains…',
       trainsOverloadNote: 'Transitous is a volunteer community service with limited resources. 500/504 errors indicate temporary overload — train data will be available in a few minutes.',
       trainsErrNote: 'If the issue persists, check SNCF Connect directly.',
-      trainsEmpty: function(off, label) { return 'No public transport connection found'+(off>0?' for '+label+' from 08:00':'')+'. This route may not be served by a direct train.'; },
-      trainsFuture: function(label) { return '📅 Trains on '+label+' from 08:00'; },
+      trainsEmpty: function(off, label, hour) { return 'No public transport connection found'+(off>0?' for '+label+' from '+(hour||'08')+':00':'')+'. This route may not be served by a direct train.'; },
+      trainsFuture: function(label, hour) { return '📅 Trains on '+label+' from '+(hour||'08')+':00'; },
       trainsDep: 'Dep.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' change'+(n>1?'s':''); },
       trainsRealtime: '🟢 Real-time',
@@ -353,6 +353,7 @@
 
   /* ─── Gestion de la date sélectionnée ─────────────── */
   var selectedDate = new Date(); // aujourd'hui par défaut
+  var selectedTrainHour = 8; // default departure hour for train search
 
   /* Retourne le décalage en jours entre selectedDate et aujourd'hui */
   function dayOffset() {
@@ -379,6 +380,29 @@
   };
 
   var DATA = null;
+
+  /* ─── Analysis result cache ───────────────────────────
+   * Keyed by "orig|dest|dateOffset|timeHour".
+   * TTL: 10 minutes. Avoids re-fetching when the user goes
+   * back from the dashboard and re-analyzes the same route.
+   ──────────────────────────────────────────────────── */
+  var ANALYSIS_CACHE = (function() {
+    var store = {};
+    var TTL = 10 * 60 * 1000; // 10 min
+    return {
+      key: function(orig, dest, offset, hour) {
+        return [orig.toLowerCase().trim(), dest.toLowerCase().trim(), offset, hour].join('|');
+      },
+      get: function(k) {
+        var entry = store[k];
+        if (!entry) return null;
+        if (Date.now() - entry.ts > TTL) { delete store[k]; return null; }
+        return entry.data;
+      },
+      set: function(k, data) { store[k] = { data: data, ts: Date.now() }; },
+      clear: function() { store = {}; }
+    };
+  })();
 
   /* ─── Navigation ────────────────────────────────────── */
   function show(id) {
@@ -461,6 +485,10 @@
           });
           btn.classList.add('active');
           selectedDate = date;
+          ANALYSIS_CACHE.clear(); // date changed → stale cache
+          // Reset time to 08:00 when switching dates
+          selectedTrainHour = 8;
+          buildTimePicker();
           updateDateDisplay();
         });
       })(d, chip);
@@ -472,11 +500,56 @@
   function updateDateDisplay() {
     var el = $('selected-date-label');
     if (el) el.textContent = dateLabel(selectedDate);
+    // Show/hide time picker based on whether it's a future date
+    var ts = $('time-section');
+    if (ts) ts.style.display = dayOffset() > 0 ? '' : 'none';
+  }
+
+  function buildTimePicker() {
+    var container = $('time-picker');
+    if (!container) return;
+    container.innerHTML = '';
+    // Slots: every hour from 05:00 to 22:00
+    var hours = [];
+    for (var h = 5; h <= 22; h++) hours.push(h);
+    hours.forEach(function(h) {
+      var chip = document.createElement('button');
+      chip.className = 'time-chip' + (h === selectedTrainHour ? ' active' : '');
+      chip.textContent = pad(h) + ':00';
+      chip.dataset.hour = h;
+      chip.addEventListener('click', function() {
+        selectedTrainHour = +this.dataset.hour;
+        container.querySelectorAll('.time-chip').forEach(function(c) { c.classList.remove('active'); });
+        this.classList.add('active');
+        // Invalidate cache when time changes
+        ANALYSIS_CACHE.clear();
+      });
+      container.appendChild(chip);
+    });
   }
 
   /* ─── AUTOCOMPLÉTION BAN ─────────────────────────── */
   var acTimers = {};
   var acClosers = []; // registered by each setupAutocomplete instance
+
+  /* ─── Autocomplete cache ──────────────────────────────
+   * Keyed by normalised query string. Avoids redundant API
+   * calls when the user types, deletes one char, re-types.
+   * Max 100 entries; oldest evicted when full.
+   ──────────────────────────────────────────────────── */
+  var AC_CACHE = (function() {
+    var store = {}, keys = [], MAX = 100;
+    return {
+      get: function(k) { return store[k] || null; },
+      set: function(k, v) {
+        if (!store[k]) {
+          if (keys.length >= MAX) { delete store[keys.shift()]; }
+          keys.push(k);
+        }
+        store[k] = v;
+      }
+    };
+  })();
 
   /* ─── Helpers géographiques ───────────────────────── */
   function isInFrance(lat, lon) {
@@ -1020,7 +1093,7 @@
 
   function fetchTrains(oLat, oLon, dLat, dLon) {
     var dt = new Date(selectedDate);
-    if (dayOffset() > 0) { dt.setHours(8, 0, 0, 0); } else { dt = new Date(); }
+    if (dayOffset() > 0) { dt.setHours(selectedTrainHour, 0, 0, 0); } else { dt = new Date(); }
 
     // Format coordonnées MOTIS 2 : "lat,lon" (sans level)
     var from = oLat + ',' + oLon;
@@ -1455,9 +1528,9 @@
            ? '<div class="info-note">'+t('trainsOverloadNote')+'</div>'
            : '<div class="info-note">'+t('trainsErrNote')+'</div>');
     } else if (trains._empty) {
-      tH='<div class="ai"><span>ℹ️</span><span class="at">'+t('trainsEmpty')(off,dateLabel(selectedDate))+'</span></div>';
+      tH='<div class="ai"><span>ℹ️</span><span class="at">'+t('trainsEmpty')(off,dateLabel(selectedDate),pad(selectedTrainHour))+'</span></div>';
     } else if (trains.trains && trains.trains.length) {
-      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">'+t('trainsFuture')(dateLabel(selectedDate))+'</div>':'')+
+      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">'+t('trainsFuture')(dateLabel(selectedDate),pad(selectedTrainHour))+'</div>':'')+
         trains.trains.map(function(tr,i){
           return '<div class="tc">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
@@ -1528,6 +1601,27 @@
     var orig=$('orig-inp').value.trim(), dest=$('dest-inp').value.trim();
     if(!orig||!dest) return;
     $('ebox').style.display='none';
+
+    // ── Cache check ──────────────────────────────────────
+    var cKey = ANALYSIS_CACHE.key(orig, dest, dayOffset(), selectedTrainHour);
+    var cached = ANALYSIS_CACHE.get(cKey);
+    if (cached) {
+      DATA = cached;
+      $('d-orig').textContent = DATA.oName;
+      $('d-dest').textContent = DATA.dName;
+      $('dash-date-label').innerHTML = dateLabel(selectedDate) +
+        '<span class="cache-badge">⚡ cached</span>';
+      $('score-circ').innerHTML = mkCircle(DATA.scoreRes.score);
+      $('score-lbl').textContent = scLbl(DATA.scoreRes.score);
+      $('score-lbl').style.color = scCol(DATA.scoreRes.score);
+      $('score-detail').textContent = t('scoreDetail')(DATA.scoreRes.score);
+      document.querySelectorAll('.tab').forEach(function(tab){ tab.classList.remove('active'); });
+      document.querySelector('.tab[data-tab="overview"]').classList.add('active');
+      renderTab('overview');
+      show('dash');
+      return;
+    }
+
     show('loading');
     ['s0','s1','s2','s3','s4'].forEach(function(id){ setStep(id,''); });
     $('lmsg').textContent=t('loadingGeocode');
@@ -1584,10 +1678,11 @@
         DATA={m:ctx.m,aq:ctx.aq,rt:ctx.rt,trains:ctx.trains||null,
               reco:reco,modes:modes,scoreRes:scoreRes,
               oName:ctx.oGeo.name,dName:ctx.dGeo.name};
+        ANALYSIS_CACHE.set(cKey, DATA); // cache for 10 min
 
         $('d-orig').textContent=ctx.oGeo.name;
         $('d-dest').textContent=ctx.dGeo.name;
-        $('dash-date-label').textContent=dateLabel(selectedDate);
+        $('dash-date-label').textContent=dateLabel(selectedDate); // fresh — no badge
         $('score-circ').innerHTML=mkCircle(scoreRes.score);
         $('score-lbl').textContent=scLbl(scoreRes.score);
         $('score-lbl').style.color=scCol(scoreRes.score);
@@ -1613,6 +1708,7 @@
 
     setupAutocomplete('orig-inp','orig-ac');
     setupAutocomplete('dest-inp','dest-ac');
+    buildTimePicker();
     // Apply initial language to all static strings
     var _ss=$('score-subtitle'); if(_ss) _ss.textContent=t('scoreSubtitle');
 
