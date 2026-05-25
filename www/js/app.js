@@ -1160,26 +1160,67 @@
   }
 
   /* Fiabilité estimée selon le mode */
+  /* Mode-based on-time estimates (SNCF 2023 annual report + RATP stats).
+   * Only shown as a bar when realTime=true (live delay data from Transitous).
+   * Otherwise omitted — estimates are too imprecise to display per-trip. */
   function modeToReliab(mode) {
     var m = (mode || '').toUpperCase();
-    if (m === 'HIGHSPEED_RAIL') return 92;
-    if (m === 'RAIL')           return 87;
-    if (m === 'BUS')            return 82;
-    if (m === 'SUBWAY')         return 90;
-    if (m === 'TRAM')           return 88;
-    return 85;
+    if (m === 'HIGHSPEED_RAIL') return 92; // TGV: ~92% on-time (SNCF 2023)
+    if (m === 'RAIL')           return 85; // TER/Intercités: ~85%
+    if (m === 'BUS')            return 80;
+    if (m === 'SUBWAY')         return 90; // RATP: ~90%
+    if (m === 'TRAM')           return 87;
+    return 83;
   }
 
-  /* ─── Score ──────────────────────────────────────── */
+  /* ─── Score ──────────────────────────────────────────────────────────────
+   * Starts at 100. Each factor deducts points based on severity.
+   * Weights rationale:
+   *   Weather (WMO code) : up to -25  — dominant factor, direct travel impact
+   *   Temperature        : up to -10  — comfort, not safety
+   *   Air quality (AQI)  : up to -25  — health risk, comparable to bad weather
+   *   Pollen             : up to -12  — affects allergy sufferers
+   * Final score clamped [5, 100].
+   * ─────────────────────────────────────────────────────────────────────── */
+  var SCORE_WEIGHTS = {
+    // WMO weather code penalties
+    wmo:    { storm:25, heavyRain:18, rain:12, drizzle:7, fog:5, cloudy:3 },
+    // Temperature (°C) comfort penalties
+    temp:   { extreme:10, uncomfortable:5 },
+    // European/US AQI penalties
+    aqi:    { veryPoor:25, poor:15, moderate:8, fair:3 },
+    // Pollen (grain/m³) penalties
+    pollen: { veryHigh:12, high:7, moderate:3 }
+  };
+
   function calcScore(m, aq) {
-    var s = 100, c = m.code;
-    if (c>=95) s-=25; else if(c>=80) s-=18; else if(c>=61) s-=12;
-    else if(c>=51) s-=7; else if(c>=45) s-=5; else if(c>=3) s-=3;
-    if (m.temp<0||m.temp>37) s-=10; else if(m.temp<5||m.temp>33) s-=5;
-    var a=aq.aqi||0;
-    if (a>100) s-=25; else if(a>80) s-=15; else if(a>60) s-=8; else if(a>40) s-=3;
-    var p=aq.polMax||0;
-    if (p>200) s-=12; else if(p>50) s-=7; else if(p>10) s-=3;
+    var s = 100, c = m.code, w = SCORE_WEIGHTS;
+
+    // Weather
+    if      (c>=95) s -= w.wmo.storm;
+    else if (c>=80) s -= w.wmo.heavyRain;
+    else if (c>=61) s -= w.wmo.rain;
+    else if (c>=51) s -= w.wmo.drizzle;
+    else if (c>=45) s -= w.wmo.fog;
+    else if (c>=3)  s -= w.wmo.cloudy;
+
+    // Temperature comfort
+    if      (m.temp < 0  || m.temp > 37) s -= w.temp.extreme;
+    else if (m.temp < 5  || m.temp > 33) s -= w.temp.uncomfortable;
+
+    // Air quality
+    var a = aq.aqi || 0;
+    if      (a > 100) s -= w.aqi.veryPoor;
+    else if (a > 80)  s -= w.aqi.poor;
+    else if (a > 60)  s -= w.aqi.moderate;
+    else if (a > 40)  s -= w.aqi.fair;
+
+    // Pollen (Europe only; outside Europe polMax=0 so no deduction)
+    var p = aq.polMax || 0;
+    if      (p > 200) s -= w.pollen.veryHigh;
+    else if (p > 50)  s -= w.pollen.high;
+    else if (p > 10)  s -= w.pollen.moderate;
+
     return { score: Math.max(5, Math.min(100, Math.round(s))) };
   }
 
@@ -1546,8 +1587,11 @@
               ?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t('trainsTransfers')(tr.transfers)+'</span>'
               :'<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">'+t('trainsDirect')+'</span>')+
             '<div style="display:flex;align-items:center;gap:3px;font-size:.62rem;font-family:var(--fm);color:var(--t2)">'+
-            '<div class="rb"><div class="rf" style="width:'+tr.fiabilite+'%"></div></div>'+tr.fiabilite+'%</div>'+
-            (tr.realTime?'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>':'')+
+            (tr.realTime
+              ? '<div class="rb"><div class="rf" style="width:'+tr.fiabilite+'%"></div></div>'+tr.fiabilite+'%</div>'+
+                '<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>'
+              : '</div>'  /* no fake reliability bar without realtime data */
+            )+
             '</div></div>';
         }).join('');
     } else {
@@ -1596,6 +1640,48 @@
   }
 
   /* ─── Analyse principale ──────────────────────────── */
+  /* ─── Error classification ────────────────────────────────────────────
+   * Converts raw fetch errors into user-friendly, actionable messages.
+   * ─────────────────────────────────────────────────────────────────── */
+  function classifyError(e, context) {
+    var msg = (e && e.message) || '';
+    var isOffline = !navigator.onLine;
+
+    if (isOffline) {
+      return LANG === 'en'
+        ? '📡 No internet connection. Please check your network.'
+        : '📡 Pas de connexion internet. Vérifiez votre réseau.';
+    }
+    if (msg.indexOf('introuvable') >= 0 || msg.indexOf('not found') >= 0) {
+      return LANG === 'en'
+        ? '🔍 City not found: "' + (context || '') + '". Try adding the country (e.g. "Paris, France").'
+        : '🔍 Ville introuvable : "' + (context || '') + '". Essayez d\'ajouter le pays (ex: "Paris, France").'
+        ;
+    }
+    if (msg.indexOf('HTTP 5') >= 0 || msg.indexOf('HTTP 50') >= 0) {
+      return LANG === 'en'
+        ? '⚙️ A data service is temporarily unavailable. Please try again in a moment.'
+        : '⚙️ Un service de données est temporairement indisponible. Réessayez dans un instant.';
+    }
+    if (msg.indexOf('HTTP 4') >= 0) {
+      return LANG === 'en'
+        ? '🔒 Access denied by a data service (HTTP ' + (msg.match(/\d{3}/) || [''])[0] + ').'
+        : '🔒 Accès refusé par un service de données (HTTP ' + (msg.match(/\d{3}/) || [''])[0] + ').';
+    }
+    if (msg.indexOf('timeout') >= 0 || msg.indexOf('AbortError') >= 0 || e.name === 'AbortError') {
+      return LANG === 'en'
+        ? '⏱ Request timed out. The service may be overloaded — try again.'
+        : '⏱ La requête a expiré. Le service est peut-être surchargé — réessayez.';
+    }
+    if (msg.indexOf('NetworkError') >= 0 || msg.indexOf('Failed to fetch') >= 0 || msg.indexOf('fetch') >= 0) {
+      return LANG === 'en'
+        ? '🌐 Network error. Check your connection or try disabling a VPN/proxy.'
+        : '🌐 Erreur réseau. Vérifiez votre connexion ou désactivez un VPN/proxy.';
+    }
+    // Fallback: show the raw message but clean it up
+    return (msg || t('errUnexpected')).replace(/^Error:\s+/i, '');
+  }
+
   function analyze() {
     acClosers.forEach(function(fn) { fn(); });
     var orig=$('orig-inp').value.trim(), dest=$('dest-inp').value.trim();
@@ -1626,77 +1712,106 @@
     ['s0','s1','s2','s3','s4'].forEach(function(id){ setStep(id,''); });
     $('lmsg').textContent=t('loadingGeocode');
 
-    setStep('s0','loading');
-    Promise.all([geocodeBAN(orig), geocodeBAN(dest)])
-      .then(function(geos){
-        var oGeo=geos[0], dGeo=geos[1]; setStep('s0','done');
-        setStep('s1','loading'); $('lmsg').textContent=t('loadingMeteo');
-        return fetchMeteo(dGeo.lat, dGeo.lon)
-          .then(function(m){ setStep('s1','done'); return {oGeo:oGeo,dGeo:dGeo,m:m}; })
-          .catch(function(){
-            setStep('s1','fail');
-            return {oGeo:oGeo,dGeo:dGeo,m:{temp:15,feels:13,humidity:null,wind:10,code:3,clouds:null,tmax:18,tmin:10,precipProb:30,uv:3,isForecast:dayOffset()>0}};
-          });
-      })
-      .then(function(ctx){
-        setStep('s2','loading'); setStep('s3','loading');
-        $('lmsg').textContent=t('loadingAir');
-        return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon, isInEurope(ctx.dGeo.lat, ctx.dGeo.lon))
-          .then(function(aq){ setStep('s2','done'); setStep('s3','done'); ctx.aq=aq; return ctx; })
-          .catch(function(){
-            setStep('s2','fail'); setStep('s3','fail');
-            ctx.aq={aqi:null,pm25:null,pm10:null,o3:null,no2:null,pollens:{},polMax:0,polActifs:[],polNiveau:{l:'Inconnu',c:'bb'}};
-            return ctx;
-          });
-      })
-      .then(function(ctx){
-        setStep('s4','loading'); $('lmsg').textContent=t('loadingRoute');
-        return fetchRoute(ctx.oGeo.lat,ctx.oGeo.lon,ctx.dGeo.lat,ctx.dGeo.lon)
-          .then(function(rt){ setStep('s4','done'); ctx.rt=rt; return ctx; })
-          .catch(function(){ setStep('s4','fail'); ctx.rt=null; return ctx; });
-      })
-      .then(function(ctx){
-        // Transitous : aucun token requis, appelé systématiquement
-        // Utilise geocodeTransitous pour avoir les coords de la gare (pas le centre-ville BAN).
-        // En cas d'échec (réseau, mock de test), repli sur les coords BAN.
-        var tOrigP = geocodeTransitous(orig).catch(function() { return ctx.oGeo; });
-        var tDestP = geocodeTransitous(dest).catch(function() { return ctx.dGeo; });
-        return Promise.all([tOrigP, tDestP])
-          .then(function(tGeos) {
-            return fetchTrains(tGeos[0].lat,tGeos[0].lon,tGeos[1].lat,tGeos[1].lon);
-          })
-          .then(function(trains){ ctx.trains=trains; return ctx; })
-          .catch(function(e){ ctx.trains={_err:e.message,trains:[]}; return ctx; });
-      })
-      .then(function(ctx){
-        return new Promise(function(r){ setTimeout(function(){ r(ctx); }, 300); });
-      })
-      .then(function(ctx){
-        var scoreRes=calcScore(ctx.m,ctx.aq);
-        var modes=calcModes(ctx.rt,ctx.trains||null);
-        var reco=buildReco(ctx.m,ctx.aq,ctx.rt);
-        DATA={m:ctx.m,aq:ctx.aq,rt:ctx.rt,trains:ctx.trains||null,
-              reco:reco,modes:modes,scoreRes:scoreRes,
-              oName:ctx.oGeo.name,dName:ctx.dGeo.name};
-        ANALYSIS_CACHE.set(cKey, DATA); // cache for 10 min
+    /* ── Pipeline steps ──────────────────────────────────────────────────
+     * Each step receives the shared context object and returns it enriched.
+     * Failures set a fallback value on the context rather than aborting the
+     * pipeline (except geocoding — if we can't find the cities, we stop).
+     * ─────────────────────────────────────────────────────────────────── */
 
-        $('d-orig').textContent=ctx.oGeo.name;
-        $('d-dest').textContent=ctx.dGeo.name;
-        $('dash-date-label').textContent=dateLabel(selectedDate); // fresh — no badge
-        $('score-circ').innerHTML=mkCircle(scoreRes.score);
-        $('score-lbl').textContent=scLbl(scoreRes.score);
-        $('score-lbl').style.color=scCol(scoreRes.score);
-        $('score-detail').textContent=t('scoreDetail')(scoreRes.score);
+    function stepGeocode() {
+      setStep('s0', 'loading');
+      return Promise.all([geocodeBAN(orig), geocodeBAN(dest)])
+        .then(function(geos) {
+          setStep('s0', 'done');
+          return { oGeo: geos[0], dGeo: geos[1] };
+        });
+      // No catch here — geocoding failure is fatal (propagates to outer catch)
+    }
 
-        document.querySelectorAll('.tab').forEach(function(tab){ tab.classList.remove('active'); });
-        document.querySelector('.tab[data-tab="overview"]').classList.add('active');
-        renderTab('overview');
-        show('dash');
-      })
+    function stepMeteo(ctx) {
+      setStep('s1', 'loading');
+      $('lmsg').textContent = t('loadingMeteo');
+      return fetchMeteo(ctx.dGeo.lat, ctx.dGeo.lon)
+        .then(function(m) { setStep('s1', 'done'); ctx.m = m; return ctx; })
+        .catch(function() {
+          setStep('s1', 'fail');
+          ctx.m = { temp:15, feels:13, humidity:null, wind:10, code:3,
+                    clouds:null, tmax:18, tmin:10, precipProb:30, uv:3,
+                    isForecast: dayOffset() > 0 };
+          return ctx;
+        });
+    }
+
+    function stepAirQuality(ctx) {
+      setStep('s2', 'loading'); setStep('s3', 'loading');
+      $('lmsg').textContent = t('loadingAir');
+      return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon, isInEurope(ctx.dGeo.lat, ctx.dGeo.lon))
+        .then(function(aq) { setStep('s2', 'done'); setStep('s3', 'done'); ctx.aq = aq; return ctx; })
+        .catch(function() {
+          setStep('s2', 'fail'); setStep('s3', 'fail');
+          ctx.aq = { aqi:null, pm25:null, pm10:null, o3:null, no2:null,
+                     pollens:{}, polMax:0, polActifs:[], polNiveau:{l:'—',c:'bb'} };
+          return ctx;
+        });
+    }
+
+    function stepRoute(ctx) {
+      setStep('s4', 'loading');
+      $('lmsg').textContent = t('loadingRoute');
+      return fetchRoute(ctx.oGeo.lat, ctx.oGeo.lon, ctx.dGeo.lat, ctx.dGeo.lon)
+        .then(function(rt) { setStep('s4', 'done'); ctx.rt = rt; return ctx; })
+        .catch(function() { setStep('s4', 'fail'); ctx.rt = null; return ctx; });
+    }
+
+    function stepTrains(ctx) {
+      // Use Transitous geocode for station-accurate coords; fall back to BAN on failure
+      var tOrigP = geocodeTransitous(orig).catch(function() { return ctx.oGeo; });
+      var tDestP = geocodeTransitous(dest).catch(function() { return ctx.dGeo; });
+      return Promise.all([tOrigP, tDestP])
+        .then(function(tGeos) {
+          return fetchTrains(tGeos[0].lat, tGeos[0].lon, tGeos[1].lat, tGeos[1].lon);
+        })
+        .then(function(trains) { ctx.trains = trains; return ctx; })
+        .catch(function(e) { ctx.trains = { _err: e.message, trains: [] }; return ctx; });
+    }
+
+    function stepRender(ctx) {
+      var scoreRes = calcScore(ctx.m, ctx.aq);
+      var modes    = calcModes(ctx.rt, ctx.trains || null);
+      var reco     = buildReco(ctx.m, ctx.aq, ctx.rt);
+      DATA = { m: ctx.m, aq: ctx.aq, rt: ctx.rt, trains: ctx.trains || null,
+               reco: reco, modes: modes, scoreRes: scoreRes,
+               oName: ctx.oGeo.name, dName: ctx.dGeo.name };
+      ANALYSIS_CACHE.set(cKey, DATA);
+
+      $('d-orig').textContent = ctx.oGeo.name;
+      $('d-dest').textContent = ctx.dGeo.name;
+      $('dash-date-label').textContent = dateLabel(selectedDate);
+      $('score-circ').innerHTML = mkCircle(scoreRes.score);
+      $('score-lbl').textContent = scLbl(scoreRes.score);
+      $('score-lbl').style.color = scCol(scoreRes.score);
+      $('score-detail').textContent = t('scoreDetail')(scoreRes.score);
+
+      document.querySelectorAll('.tab').forEach(function(tab) { tab.classList.remove('active'); });
+      document.querySelector('.tab[data-tab="overview"]').classList.add('active');
+      renderTab('overview');
+      show('dash');
+      return ctx;
+    }
+
+    setStep('s0', 'loading');
+    stepGeocode()
+      .then(function(ctx) { return stepMeteo(ctx); })
+      .then(function(ctx) { return stepAirQuality(ctx); })
+      .then(function(ctx) { return stepRoute(ctx); })
+      .then(function(ctx) { return stepTrains(ctx); })
+      .then(function(ctx) { return new Promise(function(r) { setTimeout(function() { r(ctx); }, 300); }); })
+      .then(function(ctx) { return stepRender(ctx); })
       .catch(function(e){
         show('search');
         var ebox=$('ebox');
-        ebox.textContent=e.message||t('errUnexpected');
+        // Pass orig/dest as context for "city not found" errors
+        ebox.textContent = classifyError(e, orig && dest ? orig + ' / ' + dest : orig || dest);
         ebox.style.display='block';
       });
   }
