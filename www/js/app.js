@@ -353,7 +353,13 @@
 
   /* ─── Gestion de la date sélectionnée ─────────────── */
   var selectedDate = new Date(); // aujourd'hui par défaut
-  var selectedTrainHour = 8; // default departure hour for train search
+  /* Default train departure hour.
+   * For today: current hour + 1 (next realistic departure), clamped 5–22.
+   * For future dates: 08:00. Reset when date changes. */
+  var selectedTrainHour = (function() {
+    var h = new Date().getHours() + 1;
+    return Math.min(22, Math.max(5, h));
+  })();
 
   /* Retourne le décalage en jours entre selectedDate et aujourd'hui */
   function dayOffset() {
@@ -386,9 +392,17 @@
    * TTL: 10 minutes. Avoids re-fetching when the user goes
    * back from the dashboard and re-analyzes the same route.
    ──────────────────────────────────────────────────── */
+  /* ─── Analysis result cache ───────────────────────────────────────────
+   * LRU cache keyed by "orig|dest|dateOffset|timeHour".
+   * Keeps up to MAX entries; evicts oldest on overflow.
+   * Each entry expires after TTL (10 min) on read.
+   * Multiple routes/times/dates are cached independently —
+   * switching from Paris→Lyon to Lyon→Paris hits cache on both.
+   ──────────────────────────────────────────────────────────────── */
   var ANALYSIS_CACHE = (function() {
-    var store = {};
+    var store = {}, keys = [];
     var TTL = 10 * 60 * 1000; // 10 min
+    var MAX = 20;              // keep up to 20 distinct route/date/time combos
     return {
       key: function(orig, dest, offset, hour) {
         return [orig.toLowerCase().trim(), dest.toLowerCase().trim(), offset, hour].join('|');
@@ -396,11 +410,29 @@
       get: function(k) {
         var entry = store[k];
         if (!entry) return null;
-        if (Date.now() - entry.ts > TTL) { delete store[k]; return null; }
+        if (Date.now() - entry.ts > TTL) {
+          delete store[k];
+          keys = keys.filter(function(x) { return x !== k; });
+          return null;
+        }
+        // LRU: move to end on access
+        keys = keys.filter(function(x) { return x !== k; });
+        keys.push(k);
         return entry.data;
       },
-      set: function(k, data) { store[k] = { data: data, ts: Date.now() }; },
-      clear: function() { store = {}; }
+      set: function(k, data) {
+        if (store[k]) {
+          // Update existing — move to end
+          keys = keys.filter(function(x) { return x !== k; });
+        } else if (keys.length >= MAX) {
+          // Evict oldest entry
+          var oldest = keys.shift();
+          delete store[oldest];
+        }
+        keys.push(k);
+        store[k] = { data: data, ts: Date.now() };
+      },
+      size: function() { return keys.length; }
     };
   })();
 
@@ -485,11 +517,14 @@
           });
           btn.classList.add('active');
           selectedDate = date;
-          ANALYSIS_CACHE.clear(); // date changed → stale cache
-          // Reset time to 08:00 when switching dates
-          selectedTrainHour = 8;
+          // Reset time: current+1 for today, 08:00 for future dates
+          var nowH = new Date().getHours() + 1;
+          selectedTrainHour = (date - new Date().setHours(0,0,0,0) < 86400000)
+            ? Math.min(22, Math.max(5, nowH))
+            : 8;
           buildTimePicker();
           updateDateDisplay();
+          // No cache clear — old entries are still valid for other date/time combos
         });
       })(d, chip);
 
@@ -502,7 +537,7 @@
     if (el) el.textContent = dateLabel(selectedDate);
     // Show/hide time picker based on whether it's a future date
     var ts = $('time-section');
-    if (ts) ts.style.display = dayOffset() > 0 ? '' : 'none';
+    if (ts) ts.style.display = ''; // always show — useful for today too
   }
 
   function buildTimePicker() {
@@ -522,7 +557,7 @@
         container.querySelectorAll('.time-chip').forEach(function(c) { c.classList.remove('active'); });
         this.classList.add('active');
         // Invalidate cache when time changes
-        ANALYSIS_CACHE.clear();
+        // Cache entry for this new time will be created fresh on next analyze()
       });
       container.appendChild(chip);
     });
@@ -1093,7 +1128,17 @@
 
   function fetchTrains(oLat, oLon, dLat, dLon) {
     var dt = new Date(selectedDate);
-    if (dayOffset() > 0) { dt.setHours(selectedTrainHour, 0, 0, 0); } else { dt = new Date(); }
+    if (dayOffset() > 0) {
+      dt.setHours(selectedTrainHour, 0, 0, 0);
+    } else {
+      // Today: use selectedTrainHour if it's in the future, otherwise current time
+      var nowHour = new Date().getHours();
+      if (selectedTrainHour > nowHour) {
+        dt.setHours(selectedTrainHour, 0, 0, 0);
+      } else {
+        dt = new Date(); // already past chosen hour — show next trains from now
+      }
+    }
 
     // Format coordonnées MOTIS 2 : "lat,lon" (sans level)
     var from = oLat + ',' + oLon;
