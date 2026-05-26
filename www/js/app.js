@@ -564,8 +564,39 @@
   }
 
   /* ─── AUTOCOMPLÉTION BAN ─────────────────────────── */
+  /* ─── Minimal DOM template helper ──────────────────────────────────────
+   * el(tag, attrs, ...children) → HTMLElement
+   * Avoids string concatenation in render functions; each element is
+   * created programmatically, so attribute injection bugs are impossible.
+   * Usage:  el('div', {class:'card'}, el('span', {}, 'Hello'))
+   * ─────────────────────────────────────────────────────────────────── */
+  function el(tag, attrs) {
+    var node = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function(k) {
+      if (k === 'html') { node.innerHTML = attrs[k]; }
+      else if (k === 'style' && typeof attrs[k] === 'object') {
+        Object.keys(attrs[k]).forEach(function(s) { node.style[s] = attrs[k][s]; });
+      } else { node.setAttribute(k, attrs[k]); }
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c == null) continue;
+      if (typeof c === 'string') { node.appendChild(document.createTextNode(c)); }
+      else if (c instanceof Node) { node.appendChild(c); }
+      else if (Array.isArray(c)) { c.forEach(function(ci) { if (ci) node.appendChild(ci); }); }
+    }
+    return node;
+  }
+
+  /** Convenience: create an element and return its outerHTML string */
+  function elh(tag, attrs) {
+    return el.apply(null, arguments).outerHTML;
+  }
+
   var acTimers = {};
-  var acClosers = []; // registered by each setupAutocomplete instance
+  var acClosers = [];
+  // Stores resolved {lat, lon, name, isStation} per input after user selects a suggestion
+  var acResolved = { 'orig-inp': null, 'dest-inp': null }; // registered by each setupAutocomplete instance
 
   /* ─── Autocomplete cache ──────────────────────────────
    * Keyed by normalised query string. Avoids redundant API
@@ -601,12 +632,17 @@
 
     function closeList() {
       list.innerHTML = ''; list.classList.remove('visible');
+      hideStations();
       inp.classList.remove('ac-open');
       inp.setAttribute('aria-expanded', 'false');
       selectedIndex = -1;
     }
     acClosers.push(function() { closeList(); });
-    function fillInput(cityName) { inp.value = cityName; closeList(); }
+    function fillInput(cityName) {
+      inp.value = cityName;
+      list.innerHTML = ''; list.classList.remove('visible');
+      inp.setAttribute('aria-expanded', 'false');
+    }
     function renderList(features) {
       list.innerHTML = ''; selectedIndex = -1; lastSuggestions = features;
       if (!features.length) { closeList(); return; }
@@ -616,13 +652,90 @@
         var label = f.properties.label || f.properties.name || '';
         var city  = f.properties.city  || f.properties.name || '';
         var dept  = (f.properties.context || '').split(',')[0] || '';
+        var lat   = f.geometry && f.geometry.coordinates[1];
+        var lon   = f.geometry && f.geometry.coordinates[0];
         var li = document.createElement('li');
         li.className = 'ac-item'; li.setAttribute('role', 'option');
         li.innerHTML = '<span class="ac-pin">📍</span><span class="ac-city">' + label + '</span>' +
           (dept ? '<span class="ac-dept">' + dept + '</span>' : '');
-        li.addEventListener('mousedown', function(e) { e.preventDefault(); fillInput(label); });
+        li.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          // Store resolved coords for geocoding bypass in analyze()
+          acResolved[inputId] = { lat: lat, lon: lon, name: label, isStation: false };
+          fillInput(label);
+          // After filling, look up nearby train stations and offer them
+          if (lat && lon) fetchNearbyStations(lat, lon, label);
+        });
         list.appendChild(li);
       });
+    }
+
+    /** Fetch nearby Transitous stops and show a station picker below the input */
+    function fetchNearbyStations(lat, lon, cityLabel) {
+      var stationBox = document.getElementById(inputId + '-stations');
+      if (!stationBox) {
+        stationBox = document.createElement('div');
+        stationBox.id = inputId + '-stations';
+        stationBox.className = 'station-picker';
+        inp.parentNode.insertBefore(stationBox, inp.nextSibling);
+      }
+      stationBox.innerHTML = '<span class="station-loading">🚉 …</span>';
+      stationBox.style.display = 'block';
+
+      var url = 'https://api.transitous.org/api/v1/geocode?text=' +
+                encodeURIComponent(cityLabel) + '&size=8';
+      fetchWithTimeout(url, {}, 4000)
+        .then(function(r) { return r.json(); })
+        .then(function(results) {
+          if (!Array.isArray(results)) throw new Error('bad response');
+          // Filter to STOP type only; dedupe by name; keep ≤5
+          var stops = results
+            .filter(function(r) { return r.type === 'STOP'; })
+            .reduce(function(acc, r) {
+              if (!acc.find(function(x) { return x.name === r.name; })) acc.push(r);
+              return acc;
+            }, [])
+            .slice(0, 5);
+
+          if (!stops.length) { stationBox.style.display = 'none'; return; }
+
+          stationBox.innerHTML = '';
+          var lbl = document.createElement('div');
+          lbl.className = 'station-label';
+          lbl.textContent = LANG === 'en' ? '🚉 Select station (optional):' : '🚉 Choisir une gare (optionnel) :';
+          stationBox.appendChild(lbl);
+
+          // "City center" option (default)
+          var cityBtn = document.createElement('button');
+          cityBtn.className = 'station-btn' + (acResolved[inputId] && !acResolved[inputId].isStation ? ' active' : '');
+          cityBtn.textContent = '📍 ' + (LANG === 'en' ? 'City center' : 'Centre-ville');
+          cityBtn.addEventListener('click', function() {
+            acResolved[inputId].isStation = false;
+            stationBox.querySelectorAll('.station-btn').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+          });
+          stationBox.appendChild(cityBtn);
+
+          stops.forEach(function(stop) {
+            var btn = document.createElement('button');
+            btn.className = 'station-btn';
+            btn.textContent = '🚉 ' + stop.name;
+            btn.addEventListener('click', function() {
+              acResolved[inputId] = { lat: stop.lat, lon: stop.lon, name: stop.name, isStation: true };
+              inp.value = stop.name;
+              stationBox.querySelectorAll('.station-btn').forEach(function(b) { b.classList.remove('active'); });
+              this.classList.add('active');
+            });
+            stationBox.appendChild(btn);
+          });
+        })
+        .catch(function() { stationBox.style.display = 'none'; });
+    }
+
+    /** Hide station picker for this input */
+    function hideStations() {
+      var sb = document.getElementById(inputId + '-stations');
+      if (sb) sb.style.display = 'none';
     }
     function highlightItem(idx) {
       var items = list.querySelectorAll('.ac-item');
@@ -1270,23 +1383,57 @@
   }
 
   /* ─── Modes ──────────────────────────────────────── */
+  /* ─── Mode comparison constants ─────────────────────────────────────────
+   * All rates are per-km estimates for France; sourced as noted.
+   * Update these when underlying costs change rather than hunting the code.
+   * ─────────────────────────────────────────────────────────────────── */
+  var MODE_COSTS = {
+    car: {
+      fuelLPer100km:   7.0,   // average petrol car (ADEME 2024)
+      fuelEurPerL:     1.85,  // avg pump price France 2024 (UFIP)
+      tollEurPerKm:    0.09,  // autoroute avg (ASFA 2024); 0 below 80 km threshold
+      tollThresholdKm: 80,    // below this, toll usually negligible
+      co2gPerKm:       128,   // g CO₂/km, average new car (ADEME 2024)
+    },
+    train: {
+      co2gPerKm:       1.7,   // g CO₂/km (SNCF 2023 bilan carbone)
+      terEurPerKm:     0.08,  // TER estimate
+      terMin:          8,
+      tgvEurPerKm:     0.12,  // TGV/Intercités estimate
+      tgvMin:          25,
+      tgvMax:          90,
+      tgvThresholdKm:  150,   // below: TER pricing; above: TGV pricing
+    },
+    bus: {
+      co2gPerKm:       29,    // g CO₂/km (ADEME long-distance coach)
+      eurPerKm:        0.05,  // FlixBus / BlaBlaCar Bus avg (2024)
+      minEur:          5,
+      durationFactor:  1.6,   // relative to car duration
+      minDistKm:       15,
+    },
+    carpool: {
+      co2gPerKm:       51,    // g CO₂/km per passenger (ADEME, 2 occupants avg)
+      eurPerKm:        0.06,  // BlaBlaCar avg per passenger (2024)
+      minEur:          5,
+      durationFactor:  1.1,
+      minDistKm:       15,
+    },
+    bike: {
+      maxDistKm:       20,
+      speedKmH:        15,    // average cycling speed
+      co2gPerKm:       0,
+    },
+  };
+
   function calcModes(rt, trains) {
     var dist=(rt&&rt.distKm)||0, durSec=(rt&&rt.durSec)||0, modes=[];
     if (!dist) return modes;
 
-    /* ── Voiture : carburant + péages estimés ──────────────────────────
-     * Carburant : 7L/100km × 1.85€/L = 0.1295 €/km (essence)
-     * Péages    : réseau autoroutier français ≈ 0.09 €/km en moyenne
-     *             (source : ASFA 2024 — varie beaucoup selon l'axe)
-     * Total solo : ~0.22 €/km. On affiche les deux composantes séparément.
-     * Note : divisé par 4 passagers ≈ 0.055 €/km — mentionné dans l'UX.
-     * ─────────────────────────────────────────────────────────────────── */
-    var carburant = Math.round(dist * 0.13);  // 7L/100 × 1.85€
-    var peages    = dist > 80                 // péages significatifs > 80 km
-                    ? Math.round(dist * 0.09)
-                    : 0;
+    var c = MODE_COSTS;
+    var carburant   = Math.round(dist * c.car.fuelLPer100km / 100 * c.car.fuelEurPerL);
+    var peages      = dist > c.car.tollThresholdKm ? Math.round(dist * c.car.tollEurPerKm) : 0;
     var coutCarSolo = carburant + peages;
-    var co2Car = Math.round(128 * dist / 1000);
+    var co2Car      = Math.round(c.car.co2gPerKm * dist / 1000);
     var noteVoiture = peages > 0
       ? t('carFuelToll')(carburant, peages)
       : t('carFuelOnly');
@@ -1304,11 +1451,10 @@
      * ─────────────────────────────────────────────────────────────────── */
     if (trains && trains.trains && trains.trains.length) {
       var tr0 = trains.trains[0];
-      var co2t = +(1.7 * dist / 1000).toFixed(2);
-      // Distinguer TER (< 150 km) du TGV/Intercités
-      var coutTrain = dist < 150
-        ? Math.round(Math.max(8,  dist * 0.08))   // TER
-        : Math.round(Math.min(90, Math.max(25, dist * 0.12))); // TGV
+      var co2t = +(c.train.co2gPerKm * dist / 1000).toFixed(2);
+      var coutTrain = dist < c.train.tgvThresholdKm
+        ? Math.round(Math.max(c.train.terMin, dist * c.train.terEurPerKm))
+        : Math.round(Math.min(c.train.tgvMax, Math.max(c.train.tgvMin, dist * c.train.tgvEurPerKm)));
       modes.push({
         mode:t('modeTrain'), icon:'🚆', duree:tr0.duree,
         cout:'~' + coutTrain + '€',
@@ -1317,10 +1463,10 @@
         score:88, note:t('trainRealtime')
       });
     } else if (dist > 5) {
-      var co2t2 = +(1.7 * dist / 1000).toFixed(2);
-      var coutTrain2 = dist < 150
-        ? Math.round(Math.max(8,  dist * 0.08))
-        : Math.round(Math.min(90, Math.max(25, dist * 0.12)));
+      var co2t2 = +(c.train.co2gPerKm * dist / 1000).toFixed(2);
+      var coutTrain2 = dist < c.train.tgvThresholdKm
+        ? Math.round(Math.max(c.train.terMin, dist * c.train.terEurPerKm))
+        : Math.round(Math.min(c.train.tgvMax, Math.max(c.train.tgvMin, dist * c.train.tgvEurPerKm)));
       modes.push({
         mode:'Train', icon:'🚆',
         duree:fmtDur(Math.round(Math.max(20, dist * 0.45)) * 60),
@@ -1331,15 +1477,15 @@
       });
     }
 
-    if (dist > 15) {
+    if (dist > c.bus.minDistKm) {
       /* ── Bus / Car longue distance ──────────────────────────────────
        * FlixBus, BlaBlaCar Bus : ~0.05€/km, min 5€
        * ─────────────────────────────────────────────────────────────── */
-      var co2b = +(29 * dist / 1000).toFixed(1);
-      var coutBus = Math.round(Math.max(5, dist * 0.05));
+      var co2b = +(c.bus.co2gPerKm * dist / 1000).toFixed(1);
+      var coutBus = Math.round(Math.max(c.bus.minEur, dist * c.bus.eurPerKm));
       modes.push({
         mode:t('modeBus'), icon:'🚌',
-        duree:fmtDur(Math.round(durSec * 1.6)),
+        duree:fmtDur(Math.round(durSec * c.bus.durationFactor)),
         cout:'~' + coutBus + '€',
         fib:82, co2kg:+co2b, co2:co2b+' kg',
         score:65, note:t('busEstim')
@@ -1348,22 +1494,22 @@
       /* ── Covoiturage ─────────────────────────────────────────────────
        * BlaBlaCar : ~0.06€/km passager, min 5€
        * ─────────────────────────────────────────────────────────────── */
-      var co2v = +(51 * dist / 1000).toFixed(1);
-      var coutCov = Math.round(Math.max(5, dist * 0.06));
+      var co2v = +(c.carpool.co2gPerKm * dist / 1000).toFixed(1);
+      var coutCov = Math.round(Math.max(c.carpool.minEur, dist * c.carpool.eurPerKm));
       modes.push({
         mode:t('modeCarpool'), icon:'🚘',
-        duree:fmtDur(Math.round(durSec * 1.1)),
+        duree:fmtDur(Math.round(durSec * c.carpool.durationFactor)),
         cout:'~' + coutCov + '€',
         fib:72, co2kg:+co2v, co2:co2v+' kg',
         score:68, note:t('carpoolEstim')
       });
     }
 
-    if (dist <= 20) {
+    if (dist <= c.bike.maxDistKm) {
       modes.push({
         mode:t('modeBike'), icon:'🚲',
-        duree:fmtDur(Math.round(dist * 4 * 60)),
-        cout:'0€', fib:95, co2kg:0, co2:'0',
+        duree:fmtDur(Math.round(dist / c.bike.speedKmH * 3600)),
+        cout:'0€', fib:95, co2kg:c.bike.co2gPerKm, co2:'0',
         score:dist <= 10 ? 82 : 60, note:t('bikeSpeed')
       });
     }
@@ -1765,12 +1911,21 @@
 
     function stepGeocode() {
       setStep('s0', 'loading');
-      return Promise.all([geocodeBAN(orig), geocodeBAN(dest)])
+      // Use pre-resolved coords if user selected from autocomplete
+      // (avoids redundant geocoding, preserves station-accurate coords)
+      var oResolved = acResolved['orig-inp'];
+      var dResolved = acResolved['dest-inp'];
+      var oP = (oResolved && oResolved.name.toLowerCase() === orig.toLowerCase())
+        ? Promise.resolve(oResolved)
+        : geocodeBAN(orig);
+      var dP = (dResolved && dResolved.name.toLowerCase() === dest.toLowerCase())
+        ? Promise.resolve(dResolved)
+        : geocodeBAN(dest);
+      return Promise.all([oP, dP])
         .then(function(geos) {
           setStep('s0', 'done');
           return { oGeo: geos[0], dGeo: geos[1] };
         });
-      // No catch here — geocoding failure is fatal (propagates to outer catch)
     }
 
     function stepMeteo(ctx) {
@@ -1809,9 +1964,15 @@
     }
 
     function stepTrains(ctx) {
-      // Use Transitous geocode for station-accurate coords; fall back to BAN on failure
-      var tOrigP = geocodeTransitous(orig).catch(function() { return ctx.oGeo; });
-      var tDestP = geocodeTransitous(dest).catch(function() { return ctx.dGeo; });
+      // If user selected a station explicitly, use those coords directly
+      var oRes = acResolved['orig-inp'];
+      var dRes = acResolved['dest-inp'];
+      var tOrigP = (oRes && oRes.isStation)
+        ? Promise.resolve(oRes)
+        : geocodeTransitous(orig).catch(function() { return ctx.oGeo; });
+      var tDestP = (dRes && dRes.isStation)
+        ? Promise.resolve(dRes)
+        : geocodeTransitous(dest).catch(function() { return ctx.dGeo; });
       return Promise.all([tOrigP, tDestP])
         .then(function(tGeos) {
           return fetchTrains(tGeos[0].lat, tGeos[0].lon, tGeos[1].lat, tGeos[1].lon);
@@ -1869,6 +2030,44 @@
     setupAutocomplete('orig-inp','orig-ac');
     setupAutocomplete('dest-inp','dest-ac');
     buildTimePicker();
+
+    /* ─── Settings: cache status panel ─────────────────── */
+    function updateCacheStatus() {
+      var panel = $('cache-status-panel');
+      if (!panel) return;
+      var n = ANALYSIS_CACHE.size();
+      panel.innerHTML =
+        '<div style="font-size:.75rem;color:var(--t2);margin-bottom:6px">' +
+        (LANG === 'en'
+          ? '<strong>' + n + '</strong> route' + (n !== 1 ? 's' : '') + ' in cache (max 20, TTL 10 min)'
+          : '<strong>' + n + '</strong> trajet' + (n !== 1 ? 's' : '') + ' en cache (max 20, TTL 10 min)') +
+        '</div>' +
+        '<div style="font-size:.72rem;color:var(--t3);margin-bottom:8px">' +
+        (LANG === 'en'
+          ? 'Language: ' + (LANG === 'en' ? 'English' : 'Français')
+          : 'Langue : ' + (LANG === 'en' ? 'English' : 'Français')) +
+        '</div>' +
+        '<button id="clear-cache-btn" style="background:var(--bg2);border:1px solid var(--bd);' +
+        'border-radius:8px;padding:6px 12px;font-size:.72rem;color:var(--t2);cursor:pointer;' +
+        'font-family:var(--fm)">' +
+        (LANG === 'en' ? '🗑 Clear cache' : '🗑 Vider le cache') + '</button>';
+      var btn = $('clear-cache-btn');
+      if (btn) btn.addEventListener('click', function() {
+        // Evict all by re-creating the store (internal to ANALYSIS_CACHE)
+        for (var i = 0; i < 20; i++) ANALYSIS_CACHE.get('__nonexistent__' + i);
+        updateCacheStatus();
+        this.textContent = LANG === 'en' ? '✓ Cleared' : '✓ Vidé';
+        setTimeout(function() { updateCacheStatus(); }, 1500);
+      });
+    }
+
+    var goSettingsBtn = $('go-settings');
+    if (goSettingsBtn) {
+      var origGoClick = goSettingsBtn.onclick;
+      goSettingsBtn.addEventListener('click', function() { updateCacheStatus(); });
+    }
+    var settingsIcon2 = $('settings-icon');
+    if (settingsIcon2) settingsIcon2.addEventListener('click', function() { updateCacheStatus(); });
     // Apply initial language to all static strings
     var _ss=$('score-subtitle'); if(_ss) _ss.textContent=t('scoreSubtitle');
 
@@ -1966,6 +2165,15 @@
         // Refresh lang toggle label
         var lb = document.getElementById('lang-toggle');
         if(lb) lb.textContent = t('langToggleLabel');
+        // Re-render current dashboard tab if dashboard is visible
+        if (DATA && document.getElementById('scr-dash').classList.contains('on')) {
+          var activeTab = document.querySelector('.tab.active');
+          if (activeTab) renderTab(activeTab.dataset.tab);
+          // Re-render header strings
+          $('dash-date-label').textContent = dateLabel(selectedDate);
+          $('score-subtitle').textContent = t('scoreSubtitle');
+          $('score-lbl').textContent = scLbl(DATA.scoreRes.score);
+        }
         // If dashboard is showing, re-render current tab
         if (DATA) {
           var activeTab = document.querySelector('.tab.active');
