@@ -6,17 +6,22 @@
 cd e2e
 npm install          # installs husky + playwright
 npm run prepare      # registers .husky/ with git
+
+cd ../unit
+npm install          # installs vitest for unit tests
 ```
 
-That's it. The hook runs automatically on every `git commit`.
-
-## What it checks (< 5 seconds)
+## What it checks (< 15 seconds)
 
 | # | Check | Blocks commit? |
 |---|---|---|
 | 1 | **Secret scan** — hardcoded API keys, tokens, passwords in staged JS/HTML/TS/JSON | ✅ Yes |
 | 2 | **JS syntax** — `node --check` on every staged `www/js/*.js` file | ✅ Yes |
-| 3 | **Test coverage reminder** — warns if `www/js/` changed but `e2e/tests/` not staged | ⚠️ Warning only |
+| 3 | **Unit tests** — Vitest suite for `calcScore`, `LRUCache`, `classifyError`, `MODE_COSTS` (~2s) | ✅ Yes |
+| 4 | **Test coverage reminder** — warns if `www/js/` changed but neither `e2e/tests/` nor `unit/tests/` staged | ⚠️ Warning only |
+
+Unit tests are skipped automatically if `unit/node_modules` is not installed yet (e.g. first clone).
+Run `cd unit && npm install` to enable them.
 
 ## What it does NOT do (lives in CI instead)
 
@@ -24,6 +29,19 @@ That's it. The hook runs automatically on every `git commit`.
 - `npm audit` → runs in the `npm-security` CI job
 - CodeQL → runs in the `codeql-analysis` CI job
 - TruffleHog deep scan → runs in the `scan-secrets` CI job
+- Coverage report upload → runs in the `unit-tests` CI job
+
+## CI job graph
+
+```
+scan-secrets ──┐
+codeql ─────────┼──► playwright-tests ──┐
+npm-audit ──────┘                        ├──► deploy-pages
+                                         ├──► build-android ──► release
+unit-tests ──────────────────────────────┘
+```
+
+Unit tests and Playwright run **in parallel**. Both must pass before deploy or Android build.
 
 ## Bypass (use sparingly)
 

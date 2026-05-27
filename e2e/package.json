@@ -9,7 +9,8 @@
     "test:headed": "npx --no playwright test --headed",
     "test:ui": "npx --no playwright test --ui",
     "test:report": "npx --no playwright show-report",
-    "prepare": "cd .. && husky e2e/.husky"
+    "prepare": "cd .. && husky e2e/.husky",
+    "test:new": "npx --no playwright test --grep-invert \"@live\" --project=chromium tests/09-time-picker.spec.ts tests/10-analysis-cache.spec.ts tests/11-lang-rerender.spec.ts tests/12-station-picker.spec.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

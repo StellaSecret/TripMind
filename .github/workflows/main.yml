@@ -61,7 +61,37 @@ jobs:
           npm ci
           npm audit --audit-level=high
 
+  # ── UNIT TESTS (Vitest — no browser, ~5s) ──────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: unit/package-lock.json
+
+      - name: Install unit test dependencies
+        working-directory: unit
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: unit
+        run: npm test
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage-${{ github.run_number }}
+          path: unit/coverage/
+          retention-days: 14
+
   # ── TESTS NON-RÉGRESSION (Playwright) ──────────────────
+  # Runs in parallel with unit tests — both must pass before deploy
   playwright-tests:
     name: Non-Regression Tests
     needs: [scan-secrets, codeql-analysis, npm-security]
@@ -79,7 +109,6 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      # Install serve from app root, verify port responds before testing
       - name: Serve app on port 3000
         run: |
           npm ci
@@ -88,7 +117,6 @@ jobs:
           timeout 30 bash -c 'until curl -sf http://localhost:3000 > /dev/null; do sleep 1; done'
           echo "App is ready on port 3000"
 
-      # Run all tests NOT tagged @live (mocked, offline, deterministic)
       - name: Run offline tests (Chromium)
         working-directory: e2e
         run: npx --no playwright test --grep-invert "@live" --project=chromium
@@ -104,10 +132,18 @@ jobs:
           path: e2e/playwright-report/
           retention-days: 14
 
-  # ── DÉPLOIEMENT PAGES (Bloqué par les tests) ───────────
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.run_number }}
+          path: e2e/test-results/
+          retention-days: 7
+
+  # ── DÉPLOIEMENT PAGES (Bloqué par unit + playwright) ───
   deploy-pages:
     name: Deploy to GitHub Pages
-    needs: [playwright-tests]
+    needs: [unit-tests, playwright-tests]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -124,10 +160,10 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-  # ── BUILD ANDROID (Bloqué par les tests) ───────────────
+  # ── BUILD ANDROID (Bloqué par unit + playwright) ────────
   build-android:
     name: Build AAB & APK
-    needs: [playwright-tests]
+    needs: [unit-tests, playwright-tests]
     runs-on: ubuntu-latest
     outputs:
       artifact-name: artifacts-${{ github.run_number }}
@@ -201,6 +237,7 @@ jobs:
             📦 **tripmind-${{ github.run_number }}.aab** (Play Store)
             📱 **tripmind-${{ github.run_number }}.apk** (Sideload)
             🧪 [Rapport Playwright](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            🔬 [Couverture unit tests](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
           files: |
             dist/*.aab
             dist/*.apk

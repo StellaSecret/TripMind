@@ -632,10 +632,10 @@
 
     function closeList() {
       list.innerHTML = ''; list.classList.remove('visible');
-      hideStations();
       inp.classList.remove('ac-open');
       inp.setAttribute('aria-expanded', 'false');
       selectedIndex = -1;
+      // Note: station picker is NOT closed here — it should persist after city selection
     }
     acClosers.push(function() { closeList(); });
     function fillInput(cityName) {
@@ -709,7 +709,8 @@
           var cityBtn = document.createElement('button');
           cityBtn.className = 'station-btn' + (acResolved[inputId] && !acResolved[inputId].isStation ? ' active' : '');
           cityBtn.textContent = '📍 ' + (LANG === 'en' ? 'City center' : 'Centre-ville');
-          cityBtn.addEventListener('click', function() {
+          cityBtn.addEventListener('mousedown', function(e) {
+            e.preventDefault();
             acResolved[inputId].isStation = false;
             stationBox.querySelectorAll('.station-btn').forEach(function(b) { b.classList.remove('active'); });
             this.classList.add('active');
@@ -720,7 +721,8 @@
             var btn = document.createElement('button');
             btn.className = 'station-btn';
             btn.textContent = '🚉 ' + stop.name;
-            btn.addEventListener('click', function() {
+            btn.addEventListener('mousedown', function(e) {
+              e.preventDefault(); // prevent blur from firing before click
               acResolved[inputId] = { lat: stop.lat, lon: stop.lon, name: stop.name, isStation: true };
               inp.value = stop.name;
               stationBox.querySelectorAll('.station-btn').forEach(function(b) { b.classList.remove('active'); });
@@ -843,9 +845,18 @@
       else if (e.key === 'Enter' && selectedIndex >= 0 && lastSuggestions[selectedIndex]) {
         e.preventDefault();
         fillInput(lastSuggestions[selectedIndex].properties.label || lastSuggestions[selectedIndex].properties.name || '');
-      } else if (e.key === 'Escape') { closeList(); }
+      } else if (e.key === 'Escape') { closeList(); hideStations(); }
     });
-    inp.addEventListener('blur', function() { setTimeout(function() { closeList(); }, 150); });
+    inp.addEventListener('blur', function() {
+      setTimeout(function() {
+        closeList();
+        // Only hide station picker if focus moved outside both input and picker
+        var sb = document.getElementById(inputId + '-stations');
+        if (sb && document.activeElement && !sb.contains(document.activeElement)) {
+          sb.style.display = 'none';
+        }
+      }, 200);
+    });
     document.addEventListener('click', function(e) {
       if (e.target !== inp && !list.contains(e.target)) closeList();
     });
@@ -1875,6 +1886,11 @@
 
   function analyze() {
     acClosers.forEach(function(fn) { fn(); });
+    // Also hide station pickers
+    ['orig-inp-stations','dest-inp-stations'].forEach(function(id) {
+      var sb = document.getElementById(id);
+      if (sb) sb.style.display = 'none';
+    });
     var orig=$('orig-inp').value.trim(), dest=$('dest-inp').value.trim();
     if(!orig||!dest) return;
     $('ebox').style.display='none';
@@ -2162,9 +2178,11 @@
         // Rebuild date chips with correct locale
         buildDatePicker();
         updateDateDisplay();
-        // Refresh lang toggle label
-        var lb = document.getElementById('lang-toggle');
-        if(lb) lb.textContent = t('langToggleLabel');
+        // Refresh lang toggle labels (search screen + dashboard)
+        ['lang-toggle','lang-toggle-dash'].forEach(function(id) {
+          var lb = document.getElementById(id);
+          if (lb) lb.textContent = t('langToggleLabel');
+        });
         // Re-render current dashboard tab if dashboard is visible
         if (DATA && document.getElementById('scr-dash').classList.contains('on')) {
           var activeTab = document.querySelector('.tab.active');
@@ -2181,6 +2199,9 @@
         }
       }
       btn.addEventListener('click', function() { applyLang(LANG === 'fr' ? 'en' : 'fr'); });
+      // Dashboard lang toggle (same behaviour)
+      var btnDash = document.getElementById('lang-toggle-dash');
+      if (btnDash) btnDash.addEventListener('click', function() { applyLang(LANG === 'fr' ? 'en' : 'fr'); });
       // Apply on first load to set all static strings correctly
       applyLang(LANG);
     })();

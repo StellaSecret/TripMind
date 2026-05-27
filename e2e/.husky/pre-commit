@@ -2,8 +2,8 @@
 # e2e/.husky/pre-commit
 #
 # Checks that run locally before every commit.
-# Fast (<10s), no server needed, no Playwright.
-# Heavy checks (tests, CodeQL, audit) stay in GitHub Actions.
+# Fast (<15s), no server needed, no browser.
+# Heavy checks (Playwright, CodeQL, audit) stay in GitHub Actions.
 
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
@@ -13,7 +13,7 @@ STAGED=$(git diff --cached --name-only)
 # 1. SECRET SCAN — block hardcoded tokens/keys before they land
 #    in git history (TruffleHog in CI is already too late)
 # ─────────────────────────────────────────────────────────────
-echo "🔍 [1/3] Scanning for secrets in staged files…"
+echo "🔍 [1/4] Scanning for secrets in staged files…"
 
 STAGED_SOURCE=$(echo "$STAGED" | grep -E '\.(js|ts|html|json|env)$' || true)
 
@@ -21,7 +21,7 @@ if [ -n "$STAGED_SOURCE" ]; then
   for file in $STAGED_SOURCE; do
     [ -f "$ROOT/$file" ] || continue
     # Hardcoded key=value assignments (apiKey = "abc123...")
-    if grep -qiE "(apikey|api_key|token|secret|password|passwd|credential)\s*[=:]\s*['\"][a-zA-Z0-9+/=_\-]{16,}" "$ROOT/$file" 2>/dev/null; then
+    if grep -qiE "(apikey|api_key|token|secret|password|passwd|credential)[[:space:]]*[=:][[[:space:]]*['\"]([a-zA-Z0-9+/=_-]){16,}" "$ROOT/$file" 2>/dev/null; then
       echo ""
       echo "❌ BLOCKED: Potential secret found in $file"
       echo "   Use environment variables or GitHub Secrets instead."
@@ -44,7 +44,7 @@ echo "   ✓ No secrets detected"
 # ─────────────────────────────────────────────────────────────
 # 2. JS SYNTAX CHECK — catch broken JS before a 3-min CI run
 # ─────────────────────────────────────────────────────────────
-echo "🔧 [2/3] Checking JS syntax…"
+echo "🔧 [2/4] Checking JS syntax…"
 
 STAGED_JS=$(echo "$STAGED" | grep '^www/.*\.js$' || true)
 HAS_ERROR=0
@@ -67,19 +67,47 @@ fi
 echo "   ✓ JS syntax OK"
 
 # ─────────────────────────────────────────────────────────────
-# 3. TEST COVERAGE REMINDER — warn if www/js/ changed but
-#    e2e/tests/ not staged (warning only, does not block)
+# 3. UNIT TESTS — pure function tests, no browser, ~2s
+#    Tests: calcScore, LRUCache, classifyError, MODE_COSTS
+#    Skipped if unit/ deps not installed yet (first clone)
 # ─────────────────────────────────────────────────────────────
-echo "🧪 [3/3] Checking test coverage…"
+echo "🧪 [3/4] Running unit tests…"
+
+UNIT_DIR="$ROOT/unit"
+STAGED_UNIT=$(echo "$STAGED" | grep -E '^(www/js/|unit/)' || true)
+
+if [ -d "$UNIT_DIR/node_modules" ]; then
+  # Always run unit tests if www/js/ or unit/ files changed
+  # Run all tests even if unchanged — they're fast enough (<3s)
+  if ! (cd "$UNIT_DIR" && npm test --silent 2>&1); then
+    echo ""
+    echo "❌ BLOCKED: Unit tests failed. Fix before committing."
+    echo "   Run 'cd unit && npm test' to see details."
+    echo ""
+    exit 1
+  fi
+  echo "   ✓ Unit tests passed"
+else
+  echo "   ⚠️  unit/node_modules not found — skipping unit tests"
+  echo "      Run 'cd unit && npm install' to enable them"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# 4. TEST COVERAGE REMINDER — warn if www/js/ changed but
+#    neither e2e/tests/ nor unit/tests/ was staged
+#    (warning only, does not block)
+# ─────────────────────────────────────────────────────────────
+echo "📋 [4/4] Checking test coverage…"
 
 WWW_CHANGED=$(echo "$STAGED" | grep '^www/js/' || true)
 E2E_CHANGED=$(echo "$STAGED" | grep '^e2e/tests/' || true)
+UNIT_CHANGED=$(echo "$STAGED" | grep '^unit/tests/' || true)
 
-if [ -n "$WWW_CHANGED" ] && [ -z "$E2E_CHANGED" ]; then
+if [ -n "$WWW_CHANGED" ] && [ -z "$E2E_CHANGED" ] && [ -z "$UNIT_CHANGED" ]; then
   echo ""
-  echo "⚠️  WARNING: www/js/ modified but no e2e/tests/ files staged."
+  echo "⚠️  WARNING: www/js/ modified but no test files staged."
   echo "   Changed: $(echo "$WWW_CHANGED" | tr '\n' ' ')"
-  echo "   Consider updating tests before pushing."
+  echo "   Consider updating e2e/tests/ or unit/tests/ before pushing."
   echo "   (Warning only — commit proceeds)"
   echo ""
 else

@@ -1,11 +1,14 @@
 {
   "name": "tripmind",
   "version": "1.0.0",
-  "description": "Assistant de déplacement intelligent pour la France — APIs publiques, zéro token obligatoire",
+  "description": "Assistant de d\u00e9placement intelligent pour la France \u2014 APIs publiques, z\u00e9ro token obligatoire",
   "scripts": {
     "sync": "cap sync android",
     "open": "cap open android",
-    "add-android": "cap add android"
+    "add-android": "cap add android",
+    "test:unit": "cd unit && npm test",
+    "test:unit:watch": "cd unit && npm run test:watch",
+    "test:all": "npm run test:unit && cd e2e && npm test"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
