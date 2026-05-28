@@ -648,26 +648,89 @@
       if (!features.length) { closeList(); return; }
       inp.classList.add('ac-open'); list.classList.add('visible');
       inp.setAttribute('aria-expanded', 'true');
+
+      // Add a separator before the first stop result if there are cities above it
+      var firstStopIdx = features.findIndex(function(f) { return f.properties._isStop; });
+      var hasCity = features.some(function(f) { return !f.properties._isStop; });
+
       features.forEach(function(f, idx) {
-        var label = f.properties.label || f.properties.name || '';
-        var city  = f.properties.city  || f.properties.name || '';
-        var dept  = (f.properties.context || '').split(',')[0] || '';
-        var lat   = f.geometry && f.geometry.coordinates[1];
-        var lon   = f.geometry && f.geometry.coordinates[0];
+        var isStop = !!f.properties._isStop;
+        var label  = f.properties.label || f.properties.name || '';
+        var dept   = (f.properties.context || '').split(',')[0] || '';
+        var lat    = f.geometry && f.geometry.coordinates[1];
+        var lon    = f.geometry && f.geometry.coordinates[0];
+
+        // Separator between city results and station results
+        if (isStop && idx === firstStopIdx && hasCity) {
+          var sep = document.createElement('li');
+          sep.className = 'ac-separator';
+          sep.setAttribute('role', 'separator');
+          sep.textContent = LANG === 'en' ? '🚉 Train stations' : '🚉 Gares';
+          list.appendChild(sep);
+        }
+
         var li = document.createElement('li');
-        li.className = 'ac-item'; li.setAttribute('role', 'option');
-        li.innerHTML = '<span class="ac-pin">📍</span><span class="ac-city">' + label + '</span>' +
+        li.className = 'ac-item' + (isStop ? ' ac-item-stop' : '');
+        li.setAttribute('role', 'option');
+        li.innerHTML =
+          '<span class="ac-pin">' + (isStop ? '🚉' : '📍') + '</span>' +
+          '<span class="ac-city">' + label + '</span>' +
           (dept ? '<span class="ac-dept">' + dept + '</span>' : '');
+
         li.addEventListener('mousedown', function(e) {
           e.preventDefault();
-          // Store resolved coords for geocoding bypass in analyze()
-          acResolved[inputId] = { lat: lat, lon: lon, name: label, isStation: false };
-          fillInput(label);
-          // After filling, look up nearby train stations and offer them
-          if (lat && lon) fetchNearbyStations(lat, lon, label);
+          if (isStop) {
+            // Station selected directly — store as station, skip sub-picker
+            acResolved[inputId] = { lat: lat, lon: lon, name: label, isStation: true };
+            fillInput(label);
+            // Hide any existing station picker for this input
+            hideStations();
+          } else {
+            // City selected — store coords, show station sub-picker
+            acResolved[inputId] = { lat: lat, lon: lon, name: label, isStation: false };
+            fillInput(label);
+            if (lat && lon) fetchNearbyStations(lat, lon, label);
+          }
         });
         list.appendChild(li);
       });
+    }
+
+    /** Search Transitous for stop/station suggestions matching query q */
+    function fetchTransitousStops(q) {
+      var url = 'https://api.transitous.org/api/v1/geocode?text=' +
+                encodeURIComponent(q) + '&size=6';
+      return fetchWithTimeout(url,
+          { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind' } }, 3000)
+        .then(function(r) { return r.json(); })
+        .then(function(results) {
+          if (!Array.isArray(results)) return [];
+          return results
+            .filter(function(r) { return r.type === 'STOP'; })
+            .reduce(function(acc, r) { // dedupe by name
+              if (!acc.find(function(x) { return x.name === r.name; })) acc.push(r);
+              return acc;
+            }, [])
+            .slice(0, 4)
+            .map(function(s) {
+              // Normalise to BAN-shaped feature, flagged as station
+              var country = s.country || '';
+              var area = (s.areas || []).find(function(a) { return a.adminLevel === 4; });
+              var region = area ? area.name : '';
+              return {
+                geometry:   { coordinates: [s.lon, s.lat] },
+                properties: {
+                  label:    s.name,
+                  city:     s.name,
+                  name:     s.name,
+                  context:  region + (country && country !== 'FR' ? (region ? ', ' : '') + country : ''),
+                  type:     'stop',
+                  _isStop:  true
+                }
+              };
+            });
+        })
+        .catch(function() { return []; });
     }
 
     /** Fetch nearby Transitous stops and show a station picker below the input */

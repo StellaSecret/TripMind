@@ -402,3 +402,13 @@ a{color:var(--blue)}
 .cache-status-card{background:var(--bg2);border:1px solid var(--bd2);
   border-radius:12px;padding:14px;margin-top:12px}
 .cache-status-title{font-size:.75rem;font-weight:700;margin-bottom:8px}
+
+/* ─── Autocomplete stop items & separator ─────── */
+.ac-separator{padding:5px 12px;font-size:.6rem;font-family:var(--fm);
+  color:var(--t3);text-transform:uppercase;letter-spacing:1px;
+  border-top:1px solid var(--bd);margin-top:3px;pointer-events:none;
+  background:var(--bg1)}
+.ac-item-stop .ac-pin{filter:none}
+.ac-item-stop .ac-city{color:var(--t1)}
+.ac-item-stop .ac-dept{color:var(--t3)}
+.ac-item-stop:hover .ac-city{color:var(--cyan)}
