@@ -790,6 +790,9 @@
     inp.addEventListener('input', function() {
       var q = inp.value.trim();
       clearTimeout(acTimers[inputId]);
+      // Clear resolved coords when user edits — old station selection is stale
+      acResolved[inputId] = null;
+      hideStations();
       if (q.length < 2) { closeList(); return; }
       acTimers[inputId] = setTimeout(function() {
         var banBase = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) + '&autocomplete=1';
@@ -2122,6 +2125,14 @@
 
     $('swap-btn').addEventListener('click', function(){
       var o=$('orig-inp'),d=$('dest-inp'),tmp=o.value; o.value=d.value; d.value=tmp;
+      // Swap resolved coords too
+      var tmpR = acResolved['orig-inp'];
+      acResolved['orig-inp'] = acResolved['dest-inp'];
+      acResolved['dest-inp'] = tmpR;
+      // Swap station pickers visibility
+      ['orig-inp-stations','dest-inp-stations'].forEach(function(id) {
+        var sb = document.getElementById(id); if (sb) sb.style.display = 'none';
+      });
     });
 
     var backBtn=$('back-btn');
