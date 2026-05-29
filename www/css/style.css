@@ -412,3 +412,16 @@ a{color:var(--blue)}
 .ac-item-stop .ac-city{color:var(--t1)}
 .ac-item-stop .ac-dept{color:var(--t3)}
 .ac-item-stop:hover .ac-city{color:var(--cyan)}
+
+/* ─── Error box — near analyze button ────────────── */
+.err-box{border-radius:10px;background:rgba(239,68,68,.1);
+  border:1px solid rgba(239,68,68,.3);color:#EF4444;
+  font-size:.78rem;padding:10px 14px;line-height:1.5;
+  animation:fadeIn .2s}
+
+/* ─── Copy link button ───────────────────────────── */
+#copy-link-btn{transition:background .15s}
+#copy-link-btn:hover{background:var(--bg3)!important}
+
+/* ─── Loading step label ─────────────────────────── */
+.lstep-txt{font-size:.65rem;color:var(--t3);font-family:var(--fm)}

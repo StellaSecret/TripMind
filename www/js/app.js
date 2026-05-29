@@ -387,6 +387,14 @@
 
   var DATA = null;
 
+  /* ─── Tab render cache ────────────────────────────────────────────────
+   * Stores rendered HTML per tab. Invalidated when DATA changes or lang
+   * switches. Avoids rebuilding the DOM on every tab click.
+   * ─────────────────────────────────────────────────────────────────── */
+  var TAB_CACHE = {};
+
+  function invalidateTabCache() { TAB_CACHE = {}; }
+
   /* ─── Analysis result cache ───────────────────────────
    * Keyed by "orig|dest|dateOffset|timeHour".
    * TTL: 10 minutes. Avoids re-fetching when the user goes
@@ -595,6 +603,42 @@
 
   var acTimers = {};
   var acClosers = [];
+
+  /* ─── Per-domain rate limiter ─────────────────────────────────────────
+   * Nominatim usage policy: max 1 request/second.
+   * Queues requests and enforces a minimum gap between calls per domain.
+   * ─────────────────────────────────────────────────────────────────── */
+  var RATE_LIMITS = {
+    'nominatim.openstreetmap.org': { minGapMs: 1100, lastCall: 0, queue: [] }
+  };
+
+  function rateLimitedFetch(url, opts) {
+    var domain;
+    try { domain = new URL(url).hostname; } catch(e) { return fetch(url, opts); }
+    var rl = RATE_LIMITS[domain];
+    if (!rl) return fetch(url, opts); // no limit for this domain
+
+    return new Promise(function(resolve, reject) {
+      rl.queue.push({ url: url, opts: opts, resolve: resolve, reject: reject });
+      if (rl.queue.length === 1) drainQueue(rl);
+    });
+  }
+
+  function drainQueue(rl) {
+    if (!rl.queue.length) return;
+    var item = rl.queue[0];
+    var now = Date.now();
+    var wait = Math.max(0, rl.minGapMs - (now - rl.lastCall));
+    setTimeout(function() {
+      rl.lastCall = Date.now();
+      fetch(item.url, item.opts)
+        .then(item.resolve, item.reject)
+        .finally(function() {
+          rl.queue.shift();
+          drainQueue(rl);
+        });
+    }, wait);
+  }
   // Stores resolved {lat, lon, name, isStation} per input after user selects a suggestion
   var acResolved = { 'orig-inp': null, 'dest-inp': null }; // registered by each setupAutocomplete instance
 
@@ -818,7 +862,7 @@
                 '&format=json&limit=5&addressdetails=1&featuretype=city';
       var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
       var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, 4000) : null;
-      return fetch(url, {
+      return rateLimitedFetch(url, {
         headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0' },
         signal: ctrl ? ctrl.signal : undefined
       })
@@ -1151,7 +1195,7 @@
           distKm: Math.round(distM / 1000),
           dist: distM >= 1000 ? Math.round(distM / 1000) + ' km' : Math.round(distM) + ' m',
           dur: fmtDur(rt.duration), durSec: rt.duration,
-          note: t('routeNote')
+          note: t('routeNote')  // translated: 'Durée théorique sans trafic (OSRM / OpenStreetMap)'
         };
       });
   }
@@ -1795,7 +1839,7 @@
     var rain=(m.code>=51&&m.code<80)||m.code>=80, masque=aq.aqi>100;
     var actExt=(aq.aqi<75&&m.uv<8&&!rain&&m.temp>5&&m.temp<35)?t('actFav'):(rain||aq.aqi>150)?t('actDec'):t('actAcc');
     var rc=[];
-    if(aq.polActifs.length) rc.push({i:'🌿',t:(LANG==='en'?'Active pollens: ':'Pollens actifs : ')+aq.polActifs.join(', ')+(LANG==='en'?'. Keep windows closed, shower when back home.':'. Vitres fermées, douche en rentrant.')});
+    if(aq.polActifs.length) rc.push({i:'🌿',t:t('recoPollenActive')(aq.polActifs.join(', '))});
     if(m.uv>=8) rc.push({i:'☀️',t:'UV '+m.uv+' — crème 50+, chapeau et lunettes UV obligatoires.'});
     else if(m.uv>=6) rc.push({i:'☀️',t:'UV '+m.uv+' — SPF 30+ recommandé pour exposition > 30 min.'});
     if(masque) rc.push({i:'😷',t:t('recoAqiBad')(aq.aqi)});
@@ -1950,6 +1994,50 @@
     return (msg || t('errUnexpected')).replace(/^Error:\s+/i, '');
   }
 
+  /* ─── URL share state ────────────────────────────────────────────────
+   * Encodes current search params into the URL hash so results can be
+   * bookmarked and shared. Format: #from=Paris&to=Lyon&d=1&h=8
+   * Restores on page load.
+   * ─────────────────────────────────────────────────────────────────── */
+  function buildShareURL() {
+    var orig = ($('orig-inp') || {}).value || '';
+    var dest = ($('dest-inp') || {}).value || '';
+    if (!orig || !dest) return window.location.href.split('#')[0];
+    var params = new URLSearchParams({
+      from: orig,
+      to:   dest,
+      d:    dayOffset(),
+      h:    selectedTrainHour,
+      lang: LANG,
+    });
+    return window.location.href.split('#')[0] + '#' + params.toString();
+  }
+
+  function restoreFromURL() {
+    try {
+      var hash = window.location.hash.slice(1);
+      if (!hash) return;
+      var p = new URLSearchParams(hash);
+      var from = p.get('from'), to = p.get('to');
+      if (!from || !to) return;
+      var origInp = $('orig-inp'), destInp = $('dest-inp');
+      if (origInp) origInp.value = from;
+      if (destInp) destInp.value = to;
+      var d = parseInt(p.get('d') || '0', 10);
+      if (d > 0 && d < 16) {
+        var chip = document.querySelector('.date-chip[data-offset="' + d + '"]');
+        if (chip) chip.click();
+      }
+      var h = parseInt(p.get('h') || '8', 10);
+      if (h >= 5 && h <= 22) {
+        selectedTrainHour = h;
+        buildTimePicker();
+      }
+      var lang = p.get('lang');
+      if (lang === 'en' || lang === 'fr') applyLang(lang);
+    } catch(e) { /* malformed hash — ignore */ }
+  }
+
   function analyze() {
     acClosers.forEach(function(fn) { fn(); });
     // Also hide station pickers
@@ -1966,6 +2054,7 @@
     var cached = ANALYSIS_CACHE.get(cKey);
     if (cached) {
       DATA = cached;
+      invalidateTabCache();
       $('d-orig').textContent = DATA.oName;
       $('d-dest').textContent = DATA.dName;
       $('dash-date-label').innerHTML = dateLabel(selectedDate) +
@@ -2101,6 +2190,8 @@
         // Pass orig/dest as context for "city not found" errors
         ebox.textContent = classifyError(e, orig && dest ? orig + ' / ' + dest : orig || dest);
         ebox.style.display='block';
+        // Scroll error into view smoothly
+        ebox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
   }
 
@@ -2257,6 +2348,8 @@
           var lb = document.getElementById(id);
           if (lb) lb.textContent = t('langToggleLabel');
         });
+        updateStepLabels();
+        invalidateTabCache(); // lang changed — tab content must be re-translated
         // Re-render current dashboard tab if dashboard is visible
         if (DATA && document.getElementById('scr-dash').classList.contains('on')) {
           var activeTab = document.querySelector('.tab.active');
@@ -2283,6 +2376,29 @@
     $('analyze-btn').addEventListener('click', analyze);
     $('orig-inp').addEventListener('keydown', function(e){ if(e.key==='Enter') analyze(); });
     $('dest-inp').addEventListener('keydown', function(e){ if(e.key==='Enter') analyze(); });
+    // Copy-link button
+    var copyLinkBtn = $('copy-link-btn');
+    if (copyLinkBtn) {
+      copyLinkBtn.addEventListener('click', function() {
+        var url = buildShareURL();
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(url).then(function() {
+            copyLinkBtn.textContent = '✓';
+            setTimeout(function() { copyLinkBtn.innerHTML = '🔗'; }, 1500);
+          });
+        } else {
+          // Fallback for older browsers
+          var ta = document.createElement('textarea');
+          ta.value = url; document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy');
+          document.body.removeChild(ta);
+          copyLinkBtn.textContent = '✓';
+          setTimeout(function() { copyLinkBtn.innerHTML = '🔗'; }, 1500);
+        }
+      });
+    }
+    // Restore state from URL hash (enables bookmarking and sharing)
+    restoreFromURL();
 
     initSettings();
   }

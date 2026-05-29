@@ -168,11 +168,11 @@
       <div class="orb"></div>
       <div class="lmsg" id="lmsg">Initialisation…</div>
       <div class="lsteps">
-        <div class="lstep" id="s0"><div class="dot"></div>Géocodage BAN (data.gouv.fr)</div>
-        <div class="lstep" id="s1"><div class="dot"></div>Météo + UV · Open-Meteo</div>
-        <div class="lstep" id="s2"><div class="dot"></div>Qualité de l'air · Copernicus CAMS</div>
-        <div class="lstep" id="s3"><div class="dot"></div>Pollen · Open-Meteo SILAM</div>
-        <div class="lstep" id="s4"><div class="dot"></div>Itinéraire routier · OSRM</div>
+        <div class="lstep" id="s0"><span class="lstep-txt">Géocodage BAN (data.gouv.fr)</span><div class="dot"></div>Géocodage BAN (data.gouv.fr)</div>
+        <div class="lstep" id="s1"><span class="lstep-txt">Météo + UV · Open-Meteo</span><div class="dot"></div>Météo + UV · Open-Meteo</div>
+        <div class="lstep" id="s2"><span class="lstep-txt">Qualité de l'air · Copernicus CAMS</span><div class="dot"></div>Qualité de l'air · Copernicus CAMS</div>
+        <div class="lstep" id="s3"><span class="lstep-txt">Pollen · Open-Meteo SILAM</span><div class="dot"></div>Pollen · Open-Meteo SILAM</div>
+        <div class="lstep" id="s4"><span class="lstep-txt">Itinéraire routier · OSRM</span><div class="dot"></div>Itinéraire routier · OSRM</div>
       </div>
     </div>
   </div>
@@ -188,6 +188,9 @@
         <span class="cpill" id="d-dest">—</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
+        <button id="copy-link-btn"
+          style="display:none;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0"
+          title="Copy share link" aria-label="Copy share link">🔗</button>
         <button id="lang-toggle-dash"
           style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:0 8px;height:30px;font-size:.65rem;cursor:pointer;font-family:var(--fm);color:var(--t2);flex-shrink:0"
           aria-label="Switch language">EN</button>
