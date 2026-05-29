@@ -148,6 +148,7 @@
       recoUvHigh: function(u) { return 'UV très élevé ('+u+') — protection 50+ indispensable'; },
       recoUvMed: function(u) { return 'UV élevé ('+u+') — SPF 30+ conseillé'; },
       recoForecast: function(n) { return 'Prévision J+'+n+' — données météo estimées, susceptibles d\'évoluer'; },
+      recoPollenActive: function(s) { return 'Pollen actif : ' + s; },
       recoCarNote: function(dur, dist) { return 'Voiture : '+dur+' pour '+dist+'.'; },
       recoTrainNote: 'Consultez SNCF Connect ou Vianavigo pour les horaires de trains',
       recoNA: 'Données routières indisponibles.',
@@ -300,6 +301,7 @@
       recoUvHigh: function(u) { return 'Very high UV ('+u+') — SPF 50+ essential'; },
       recoUvMed: function(u) { return 'High UV ('+u+') — SPF 30+ advised'; },
       recoForecast: function(n) { return 'Forecast J+'+n+' — estimated weather, subject to change'; },
+      recoPollenActive: function(s) { return 'Active pollen: ' + s; },
       recoCarNote: function(dur, dist) { return 'Car: '+dur+' for '+dist+'.'; },
       recoTrainNote: 'Check SNCF Connect or Vianavigo for train timetables',
       recoNA: 'Road data unavailable.',
@@ -2063,6 +2065,20 @@
       $('score-lbl').textContent = scLbl(DATA.scoreRes.score);
       $('score-lbl').style.color = scCol(DATA.scoreRes.score);
       $('score-detail').textContent = t('scoreDetail')(DATA.scoreRes.score);
+
+      var copyLinkBtn = $('copy-link-btn');
+      if (copyLinkBtn) copyLinkBtn.style.display = 'flex';
+      try {
+        var params = new URLSearchParams({
+          from: DATA.oName,
+          to:   DATA.dName,
+          d:    dayOffset(),
+          h:    selectedTrainHour,
+          lang: LANG,
+        });
+        window.location.hash = params.toString();
+      } catch(e) {}
+
       document.querySelectorAll('.tab').forEach(function(tab){ tab.classList.remove('active'); });
       document.querySelector('.tab[data-tab="overview"]').classList.add('active');
       renderTab('overview');
@@ -2169,6 +2185,19 @@
       $('score-lbl').style.color = scCol(scoreRes.score);
       $('score-detail').textContent = t('scoreDetail')(scoreRes.score);
 
+      var copyLinkBtn = $('copy-link-btn');
+      if (copyLinkBtn) copyLinkBtn.style.display = 'flex';
+      try {
+        var params = new URLSearchParams({
+          from: ctx.oGeo.name,
+          to:   ctx.dGeo.name,
+          d:    dayOffset(),
+          h:    selectedTrainHour,
+          lang: LANG,
+        });
+        window.location.hash = params.toString();
+      } catch(e) {}
+
       document.querySelectorAll('.tab').forEach(function(tab) { tab.classList.remove('active'); });
       document.querySelector('.tab[data-tab="overview"]').classList.add('active');
       renderTab('overview');
@@ -2193,6 +2222,79 @@
         // Scroll error into view smoothly
         ebox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
+  }
+
+  /* ─── LANGUE FR / EN ─────────────────────────────── */
+  function updateStepLabels() {
+    ['s0','s1','s2','s3','s4'].forEach(function(id, i) {
+      var el = document.getElementById(id);
+      if (el && el.querySelector('.lstep-txt')) {
+        el.querySelector('.lstep-txt').textContent = t('step' + i);
+      }
+    });
+  }
+
+  function applyLang(l) {
+    LANG = l;
+    try { localStorage.setItem('tripmind-lang', l); } catch(e) {}
+    // Update static DOM strings
+    var el;
+    el = document.getElementById('logo-sub'); if(el) el.textContent = t('logoSub');
+    el = document.getElementById('pills-title'); if(el) el.textContent = t('pillsTitle');
+    ['pill0','pill1','pill2','pill3','pill4','pill5'].forEach(function(id,i){
+      el = document.getElementById(id); if(el) el.textContent = t('pill'+i);
+    });
+    el = document.getElementById('date-section-label'); if(el) el.textContent = t('dateLabel');
+    el = document.getElementById('orig-label'); if(el) el.textContent = t('origLabel');
+    el = document.getElementById('orig-inp'); if(el) el.placeholder = t('origPlaceholder');
+    el = document.getElementById('dest-label'); if(el) el.textContent = t('destLabel');
+    el = document.getElementById('dest-inp'); if(el) el.placeholder = t('destPlaceholder');
+    el = document.getElementById('swap-btn'); if(el) el.setAttribute('aria-label', t('swapAriaLabel'));
+    el = document.getElementById('analyze-btn'); if(el) el.textContent = t('analyzeBtn');
+    el = document.getElementById('go-settings'); if(el) el.textContent = t('aboutSources');
+    el = document.getElementById('settings-back'); if(el) el.textContent = t('settingsBack');
+    el = document.getElementById('settings-title'); if(el) el.textContent = t('settingsTitle');
+    el = document.getElementById('transitous-subtitle'); if(el) el.textContent = t('transitousSubtitle');
+    el = document.getElementById('transitous-step1'); if(el) el.innerHTML = t('transitousStep1');
+    el = document.getElementById('transitous-step2'); if(el) el.textContent = t('transitousStep2');
+    el = document.getElementById('transitous-step3'); if(el) el.textContent = t('transitousStep3');
+    el = document.getElementById('free-apis-title'); if(el) el.textContent = t('freeApisTitle');
+    ['freeApi1','freeApi2','freeApi3','freeApi4','freeApi5','freeApi6'].forEach(function(id){
+      el = document.getElementById(id); if(el) el.innerHTML = t(id);
+    });
+    el = document.getElementById('privacy-notice'); if(el) el.innerHTML = t('privacyNotice');
+    el = document.getElementById('back-btn'); if(el) el.textContent = t('backBtn');
+    el = document.getElementById('tab-overview'); if(el) el.textContent = t('tabOverview');
+    el = document.getElementById('tab-route'); if(el) el.textContent = t('tabRoute');
+    el = document.getElementById('tab-air'); if(el) el.textContent = t('tabAir');
+    el = document.getElementById('tab-sante'); if(el) el.textContent = t('tabSante');
+    el = document.getElementById('tab-trains'); if(el) el.textContent = t('tabTrains');
+    el = document.getElementById('score-subtitle'); if(el) el.textContent = t('scoreSubtitle');
+    el = document.getElementById('lmsg'); if(el && el.textContent === '') el.textContent = t('loadingInit');
+    // Rebuild date chips with correct locale
+    buildDatePicker();
+    updateDateDisplay();
+    // Refresh lang toggle labels (search screen + dashboard)
+    ['lang-toggle','lang-toggle-dash'].forEach(function(id) {
+      var lb = document.getElementById(id);
+      if (lb) lb.textContent = t('langToggleLabel');
+    });
+    updateStepLabels();
+    invalidateTabCache(); // lang changed — tab content must be re-translated
+    // Re-render current dashboard tab if dashboard is visible
+    if (DATA && document.getElementById('scr-dash').classList.contains('on')) {
+      var activeTab = document.querySelector('.tab.active');
+      if (activeTab) renderTab(activeTab.dataset.tab);
+      // Re-render header strings
+      $('dash-date-label').textContent = dateLabel(selectedDate);
+      $('score-subtitle').textContent = t('scoreSubtitle');
+      $('score-lbl').textContent = scLbl(DATA.scoreRes.score);
+    }
+    // If dashboard is showing, re-render current tab
+    if (DATA) {
+      var activeTab = document.querySelector('.tab.active');
+      if (activeTab) renderTab(activeTab.dataset.tab);
+    }
   }
 
   /* ─── Init ────────────────────────────────────────── */
@@ -2302,69 +2404,6 @@
     (function() {
       var btn = document.getElementById('lang-toggle');
       if (!btn) return;
-      function applyLang(l) {
-        LANG = l;
-        try { localStorage.setItem('tripmind-lang', l); } catch(e) {}
-        // Update static DOM strings
-        var el;
-        el = document.getElementById('logo-sub'); if(el) el.textContent = t('logoSub');
-        el = document.getElementById('pills-title'); if(el) el.textContent = t('pillsTitle');
-        ['pill0','pill1','pill2','pill3','pill4','pill5'].forEach(function(id,i){
-          el = document.getElementById(id); if(el) el.textContent = t('pill'+i);
-        });
-        el = document.getElementById('date-section-label'); if(el) el.textContent = t('dateLabel');
-        el = document.getElementById('orig-label'); if(el) el.textContent = t('origLabel');
-        el = document.getElementById('orig-inp'); if(el) el.placeholder = t('origPlaceholder');
-        el = document.getElementById('dest-label'); if(el) el.textContent = t('destLabel');
-        el = document.getElementById('dest-inp'); if(el) el.placeholder = t('destPlaceholder');
-        el = document.getElementById('swap-btn'); if(el) el.setAttribute('aria-label', t('swapAriaLabel'));
-        el = document.getElementById('analyze-btn'); if(el) el.textContent = t('analyzeBtn');
-        el = document.getElementById('go-settings'); if(el) el.textContent = t('aboutSources');
-        el = document.getElementById('settings-back'); if(el) el.textContent = t('settingsBack');
-        el = document.getElementById('settings-title'); if(el) el.textContent = t('settingsTitle');
-        el = document.getElementById('transitous-subtitle'); if(el) el.textContent = t('transitousSubtitle');
-        el = document.getElementById('transitous-step1'); if(el) el.innerHTML = t('transitousStep1');
-        el = document.getElementById('transitous-step2'); if(el) el.textContent = t('transitousStep2');
-        el = document.getElementById('transitous-step3'); if(el) el.textContent = t('transitousStep3');
-        el = document.getElementById('free-apis-title'); if(el) el.textContent = t('freeApisTitle');
-        ['freeApi1','freeApi2','freeApi3','freeApi4','freeApi5','freeApi6'].forEach(function(id){
-          el = document.getElementById(id); if(el) el.innerHTML = t(id);
-        });
-        el = document.getElementById('privacy-notice'); if(el) el.innerHTML = t('privacyNotice');
-        el = document.getElementById('s0'); if(el) el.querySelector('.lstep-txt') && (el.querySelector('.lstep-txt').textContent = t('step0'));
-        el = document.getElementById('back-btn'); if(el) el.textContent = t('backBtn');
-        el = document.getElementById('tab-overview'); if(el) el.textContent = t('tabOverview');
-        el = document.getElementById('tab-route'); if(el) el.textContent = t('tabRoute');
-        el = document.getElementById('tab-air'); if(el) el.textContent = t('tabAir');
-        el = document.getElementById('tab-sante'); if(el) el.textContent = t('tabSante');
-        el = document.getElementById('tab-trains'); if(el) el.textContent = t('tabTrains');
-        el = document.getElementById('score-subtitle'); if(el) el.textContent = t('scoreSubtitle');
-        el = document.getElementById('lmsg'); if(el && el.textContent === '') el.textContent = t('loadingInit');
-        // Rebuild date chips with correct locale
-        buildDatePicker();
-        updateDateDisplay();
-        // Refresh lang toggle labels (search screen + dashboard)
-        ['lang-toggle','lang-toggle-dash'].forEach(function(id) {
-          var lb = document.getElementById(id);
-          if (lb) lb.textContent = t('langToggleLabel');
-        });
-        updateStepLabels();
-        invalidateTabCache(); // lang changed — tab content must be re-translated
-        // Re-render current dashboard tab if dashboard is visible
-        if (DATA && document.getElementById('scr-dash').classList.contains('on')) {
-          var activeTab = document.querySelector('.tab.active');
-          if (activeTab) renderTab(activeTab.dataset.tab);
-          // Re-render header strings
-          $('dash-date-label').textContent = dateLabel(selectedDate);
-          $('score-subtitle').textContent = t('scoreSubtitle');
-          $('score-lbl').textContent = scLbl(DATA.scoreRes.score);
-        }
-        // If dashboard is showing, re-render current tab
-        if (DATA) {
-          var activeTab = document.querySelector('.tab.active');
-          if (activeTab) renderTab(activeTab.dataset.tab);
-        }
-      }
       btn.addEventListener('click', function() { applyLang(LANG === 'fr' ? 'en' : 'fr'); });
       // Dashboard lang toggle (same behaviour)
       var btnDash = document.getElementById('lang-toggle-dash');
