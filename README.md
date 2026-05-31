@@ -44,8 +44,8 @@ L'APK est généré dans `android/app/build/outputs/apk/debug/app-debug.apk`.
 TripMind utilise [Transitous](https://transitous.org), un routeur de transport public open source basé sur le moteur [MOTIS 2](https://github.com/motis-project/motis) et des données GTFS ouvertes, dont les données SNCF France.
 
 **Pourquoi Transitous plutôt que l'API SNCF officielle ?**
-- API SNCF officielle (`api.sncf.com`) : le support ne répond plus aux inscriptions individuelles
-- Transitous : aucun compte, aucun token, couverture France complète
+- API SNCF officielle (`api.sncf.com`) : le support ne répond plus aux inscriptions individuelles.
+- Transitous : aucun compte, aucun token, couverture France complète.
 
 **Politique d'usage Transitous :**
 Si TripMind est utilisé par un nombre significatif d'utilisateurs, contactez Transitous sur leur [channel Matrix](https://matrix.to/#/%23transitous:matrix.spline.de) pour vous signaler — c'est leur politique pour les apps FOSS.
@@ -56,13 +56,31 @@ Si TripMind est utilisé par un nombre significatif d'utilisateurs, contactez Tr
 
 | Onglet | Contenu |
 |--------|---------|
-| **🗺 Aperçu** | Score global /100, météo complète, AQI, alertes et recommandations |
-| **🚗 Trajet** | Distance + durée OSRM, comparaison voiture / train / bus / covoiturage / vélo avec CO₂ |
-| **💨 Air & Pollen** | Barres polliniques (5 espèces), polluants (PM₂.₅, PM₁₀, NO₂, O₃) |
-| **💊 Santé** | Tableau de bord santé + recommandations personnalisées |
+| **🗺 Aperçu** | Score global /100, météo complète, AQI, alertes et recommandations. |
+| **🚗 Trajet** | Distance + durée OSRM, comparaison voiture / train / bus / covoiturage / vélo avec CO₂. |
+| **💨 Air & Pollen** | Barres polliniques (5 espèces), polluants (PM₂.₅, PM₁₀, NO₂, O₃). |
+| **💊 Santé** | Tableau de bord santé + recommandations personnalisées. |
 | **🚆 Trains** | Prochains trains via Transitous/MOTIS 2 + liens SNCF Connect, Ouigo, RATP… |
 
 **Sélecteur de date** : prévisions sur 16 jours (J à J+15). Météo et pollen disponibles sur ~5 jours pour les données de qualité air.
+
+---
+
+## 🧪 Tests & Qualité
+
+TripMind suit des standards de qualité rigoureux avec plus de 160 tests automatisés.
+
+### Tests Unitaires (Vitest)
+Ciblent la logique métier (calcul de score, parsing, gestion du cache).
+```bash
+npm run test:unit
+```
+
+### Tests E2E (Playwright)
+Validations complètes de l'interface et des flux utilisateurs (165 tests). Les tests tournent en mode **offline** (données API mockées) pour garantir la reproductibilité.
+```bash
+cd e2e && npm test
+```
 
 ---
 
@@ -70,62 +88,46 @@ Si TripMind est utilisé par un nombre significatif d'utilisateurs, contactez Tr
 
 ```
 TripMind/
-├── .github/
-│   └── workflows/
-│       ├── build.yml          # CI/CD : build APK signé + release GitHub
-│       └── pages.yml          # Déploiement GitHub Pages (www/)
+├── .github/ workflows/
+│   └── main.yml               # Pipeline CI/CD unique (Sécurité, Tests, Build, Deploy)
+├── android/                   # Projet natif Capacitor (Java/Gradle)
+├── e2e/                       # Tests de non-régression (Playwright) — 165 tests
+├── unit/                      # Tests unitaires (Vitest)
 ├── www/                       # Application web (Capacitor webDir)
-│   ├── index.html             # Structure HTML — 4 écrans
-│   ├── css/
-│   │   └── style.css          # Thème sombre + date picker + safe areas
+│   ├── index.html             # Structure HTML (Single Page App)
+│   ├── css/ style.css         # Design responsive & safe areas
 │   └── js/
-│       └── app.js             # Tout-en-un IIFE : APIs + logique + rendu
-├── KEYSTORE_SETUP.md          # Guide pour signer les APKs de mise à jour
-├── .gitignore
-├── capacitor.config.json
-├── package.json
+│       ├── api.js             # Couche d'accès aux données (Fetch)
+│       └── app.js             # Logique principale, calculs & rendu DOM
+├── capacitor.config.json      # Configuration Capacitor
+├── package.json               # Scripts & dépendances globales
 └── README.md
 ```
 
 ---
 
-## 🤖 Pipeline CI/CD
+## 🤖 Pipeline CI/CD (`main.yml`)
 
-### Build APK (`build.yml`)
-Se déclenche à chaque push sur `main`. Génère un APK release signé avec le keystore stocké en secrets GitHub → crée une Release avec l'APK en pièce jointe.
-
-Voir `KEYSTORE_SETUP.md` pour configurer les secrets de signature.
-
-**Lancer manuellement :** Actions → *Build TripMind APK* → **Run workflow**
-
-### GitHub Pages (`pages.yml`)
-Déploie `www/` sur GitHub Pages à chaque push sur `main`.
-
-**Activation unique requise :** Settings → Pages → Source → **GitHub Actions**
-
-URL : `https://stellasecret.github.io/TripMind/`
-
----
-
-## 📱 Installation Android
-
-1. Téléchargez `TripMind-vN.apk` depuis la dernière [Release](../../releases)
-2. **Paramètres → Sécurité → Sources inconnues**
-3. Installez — Android détecte automatiquement les mises à jour si l'APK est signé avec le même keystore
+Le workflow GitHub Actions se déclenche à chaque push sur `main` et exécute :
+1. **Sûreté** : Scan de secrets (TruffleHog) + Analyse statique (CodeQL) + Audit NPM.
+2. **Validation** : Exécution de tous les tests Unitaires et E2E.
+3. **Distribution Web** : Déploiement automatique sur GitHub Pages.
+4. **Distribution Mobile** : Build de l'AAB (Play Store) et de l'APK (Release), signés numériquement.
 
 ---
 
 ## 🏗 Développement local
 
 ```bash
-# Tester dans le navigateur
+# Lancer l'application dans le navigateur (nécessite 'serve' ou python)
+npx serve www --listen 8080
+# ou
 cd www && python3 -m http.server 8080
-# → http://localhost:8080
 
-# Synchroniser après modifications de www/
+# Synchroniser les changements vers Android
 npx cap sync android
 
-# Ouvrir Android Studio
+# Ouvrir dans Android Studio
 npx cap open android
 ```
 
