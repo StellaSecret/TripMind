@@ -51,6 +51,7 @@
       freeApi5: '<strong>OSRM / OpenStreetMap</strong> — itinéraire routier théorique',
       freeApi6: '<strong>Transitous / MOTIS 2</strong> — trains et transports publics',
       privacyNotice: 'TripMind ne collecte aucune donnée personnelle.<br>Aucun compte, aucun token, aucun tracking.',
+      privacyLink: 'Politique de confidentialité',
       /* Loading */
       loadingInit: 'Initialisation…',
       loadingGeocode: 'Géocodage des villes…',
@@ -204,6 +205,7 @@
       freeApi5: '<strong>OSRM / OpenStreetMap</strong> — theoretical road route',
       freeApi6: '<strong>Transitous / MOTIS 2</strong> — trains and public transport',
       privacyNotice: 'TripMind collects no personal data.<br>No account, no token, no tracking.',
+      privacyLink: 'Privacy Policy',
       /* Loading */
       loadingInit: 'Initialising…',
       loadingGeocode: 'Geocoding cities…',
@@ -2263,7 +2265,15 @@
       el = document.getElementById(id); if(el) el.innerHTML = t(id);
     });
     el = document.getElementById('privacy-notice'); if(el) el.innerHTML = t('privacyNotice');
+    el = document.getElementById('privacy-link');
+    if(el) {
+      el.textContent = t('privacyLink');
+      el.href = LANG === 'en'
+        ? 'https://stellasecret.github.io/privacy-pages/tripmind/privacy-en.html'
+        : 'https://stellasecret.github.io/privacy-pages/tripmind/privacy.html';
+    }
     el = document.getElementById('back-btn'); if(el) el.textContent = t('backBtn');
+
     el = document.getElementById('tab-overview'); if(el) el.textContent = t('tabOverview');
     el = document.getElementById('tab-route'); if(el) el.textContent = t('tabRoute');
     el = document.getElementById('tab-air'); if(el) el.textContent = t('tabAir');
