@@ -606,6 +606,7 @@
   }
 
   var acTimers = {};
+  var acAborts = {}; // AbortControllers keyed by inputId — cancels stale in-flight requests
   var acClosers = [];
 
   /* ─── Per-domain rate limiter ─────────────────────────────────────────
@@ -744,12 +745,14 @@
       });
     }
 
-    /** Search Transitous for stop/station suggestions matching query q */
-    function fetchTransitousStops(q) {
+    /** Search Transitous for stop/station suggestions matching query q.
+     *  signal: optional AbortSignal — cancelled when user types another char. */
+    function fetchTransitousStops(q, signal) {
       var url = 'https://api.transitous.org/api/v1/geocode?text=' +
                 encodeURIComponent(q) + '&size=6';
-      return fetchWithTimeout(url,
-          { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind', 'User-Agent': TRANSITOUS_UA } }, 3000)
+      var opts = { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind', 'User-Agent': TRANSITOUS_UA } };
+      if (signal) opts.signal = signal;
+      return fetchWithTimeout(url, opts, 3000)
         .then(function(r) { return r.json(); })
         .then(function(results) {
           if (!Array.isArray(results)) return [];
@@ -778,7 +781,10 @@
               };
             });
         })
-        .catch(function() { return []; });
+        .catch(function(err) {
+          if (err && err.name === 'AbortError') return [];
+          return [];
+        });
     }
 
     /** Fetch nearby Transitous stops and show a station picker below the input */
@@ -860,15 +866,18 @@
      * 2. Nominatim (OSM) — global fallback when BAN returns < 2 results
      * Both results are merged and deduplicated before display.
      */
-    function fetchNominatimAC(q) {
+    /** signal: optional AbortSignal from the caller — takes priority over internal timeout. */
+    function fetchNominatimAC(q, signal) {
       var url = 'https://nominatim.openstreetmap.org/search?q=' +
                 encodeURIComponent(q) +
                 '&format=json&limit=5&addressdetails=1&featuretype=city';
-      var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      // Use caller's signal if provided; otherwise create a local 4s timeout abort
+      var ctrl = (!signal && typeof AbortController !== 'undefined') ? new AbortController() : null;
       var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, 4000) : null;
+      var activeSignal = signal || (ctrl ? ctrl.signal : undefined);
       return rateLimitedFetch(url, {
         headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0 (https://github.com/StellaSecret/TripMind; mailto:thaikhuevincent.nguyen@gmail.com)' },
-        signal: ctrl ? ctrl.signal : undefined
+        signal: activeSignal
       })
       .then(function(r) {
         if (timer) clearTimeout(timer);
@@ -895,17 +904,28 @@
           };
         });
       })
-      .catch(function() { return []; });
+      .catch(function(err) {
+        if (timer) clearTimeout(timer);
+        return []; // AbortError and network errors both yield empty — caller checks abort state
+      });
     }
 
     inp.addEventListener('input', function() {
       var q = inp.value.trim();
       clearTimeout(acTimers[inputId]);
+      // Abort any in-flight requests for this input — prevents stale responses
+      // from an earlier (slower) query overwriting results for the current query.
+      if (acAborts[inputId]) { acAborts[inputId].abort(); acAborts[inputId] = null; }
       // Clear resolved coords when user edits — old station selection is stale
       acResolved[inputId] = null;
       hideStations();
       if (q.length < 2) { closeList(); return; }
+      // 350ms debounce: skips most intermediate keystrokes while still feeling responsive
       acTimers[inputId] = setTimeout(function() {
+        var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        acAborts[inputId] = ctrl;
+        var signal = ctrl ? ctrl.signal : undefined;
+
         var banBase = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) + '&autocomplete=1';
 
         // Run BAN (municipality) and Nominatim in parallel
@@ -913,12 +933,12 @@
         // For longer queries that look like addresses (contain digits or spaces+words):
         // also fetch housenumber results so full addresses appear.
         var looksLikeAddress = q.length >= 5 && /\d/.test(q);
-        var banMunicipalityP = fetch(banBase + '&type=municipality&limit=4')
+        var banMunicipalityP = fetch(banBase + '&type=municipality&limit=4', { signal: signal })
           .then(function(r) { return r.json(); })
           .then(function(d) { return d.features || []; })
           .catch(function() { return []; });
         var banAddressP = looksLikeAddress
-          ? fetch(banBase + '&type=housenumber&limit=5')
+          ? fetch(banBase + '&type=housenumber&limit=5', { signal: signal })
               .then(function(r) { return r.json(); })
               .then(function(d) { return d.features || []; })
               .catch(function() { return []; })
@@ -927,13 +947,15 @@
           return r[0].concat(r[1]);
         });
 
-        var nomP = fetchNominatimAC(q);
+        var nomP = fetchNominatimAC(q, signal);
 
         // Search Transitous stops in parallel — allows typing "gare de lyon",
         // "paris austerlitz", etc. and selecting a station directly from the dropdown.
-        var stopP = fetchTransitousStops(q);
+        var stopP = fetchTransitousStops(q, signal);
 
         Promise.all([banP, nomP, stopP]).then(function(results) {
+          // If this request was already aborted (a newer keystroke fired), discard results
+          if (ctrl && ctrl.signal.aborted) return;
           var banFeatures  = results[0];
           var nomFeatures  = results[1];
           var stopFeatures = results[2];
@@ -953,8 +975,12 @@
           var cityResults = merged.slice(0, 4);
           var stopResults = stopFeatures.slice(0, 4);
           renderList(cityResults.concat(stopResults));
-        }).catch(function() { closeList(); });
-      }, 150);
+        }).catch(function(err) {
+          // AbortError is expected when user keeps typing — don't clear the list
+          if (err && err.name === 'AbortError') return;
+          closeList();
+        });
+      }, 350);
     });
     inp.addEventListener('keydown', function(e) {
       if (!list.classList.contains('visible')) return;

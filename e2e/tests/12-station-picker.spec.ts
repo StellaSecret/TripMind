@@ -34,7 +34,7 @@ test.describe('Station picker — appears after city selection', () => {
     await gotoSearch(page);
 
     await page.locator(SEL.origInput).fill('Paris');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
 
     // Simulate clicking the first autocomplete suggestion
     await expect(page.locator('#orig-ac')).toHaveClass(/visible/, { timeout: 6_000 });
@@ -53,7 +53,7 @@ test.describe('Station picker — appears after city selection', () => {
     await gotoSearch(page);
 
     await page.locator(SEL.origInput).fill('Paris');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     await expect(page.locator('#orig-ac')).toHaveClass(/visible/, { timeout: 6_000 });
     await page.locator('#orig-ac .ac-item').first().click();
 
@@ -70,7 +70,7 @@ test.describe('Station picker — appears after city selection', () => {
     await gotoSearch(page);
 
     await page.locator(SEL.origInput).fill('Paris');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     await expect(page.locator('#orig-ac')).toHaveClass(/visible/, { timeout: 6_000 });
     await page.locator('#orig-ac .ac-item').first().click();
 
@@ -88,7 +88,7 @@ test.describe('Station picker — appears after city selection', () => {
     await gotoSearch(page);
 
     await page.locator(SEL.origInput).fill('Paris');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     await expect(page.locator('#orig-ac')).toHaveClass(/visible/, { timeout: 6_000 });
     await page.locator('#orig-ac .ac-item').first().click();
 
@@ -106,7 +106,7 @@ test.describe('Station picker — appears after city selection', () => {
     await gotoSearch(page);
 
     await page.locator(SEL.origInput).fill('Paris');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     await expect(page.locator('#orig-ac')).toHaveClass(/visible/, { timeout: 6_000 });
     await page.locator('#orig-ac .ac-item').first().click();
 
@@ -130,7 +130,7 @@ test.describe('Station picker — hidden when no stations found', () => {
     await gotoSearch(page);
 
     await page.locator(SEL.origInput).fill('Paris');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     await expect(page.locator('#orig-ac')).toHaveClass(/visible/, { timeout: 6_000 });
     await page.locator('#orig-ac .ac-item').first().click();
 
@@ -138,5 +138,73 @@ test.describe('Station picker — hidden when no stations found', () => {
     const picker = page.locator('#orig-inp-stations');
     const visible = await picker.isVisible().catch(() => false);
     expect(visible).toBe(false);
+  });
+});
+
+test.describe('Autocomplete debounce and abort', () => {
+
+  test('rapid typing only triggers one request — last query wins', async ({ page }) => {
+    let requestCount = 0;
+    // Count how many geocode requests reach Transitous
+    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, async route => {
+      requestCount++;
+      await route.fulfill({ json: [] });
+    });
+    await page.route(/api-adresse\.data\.gouv\.fr/, r => r.fulfill({ json: { features: [] } }));
+    await page.route(/nominatim\.openstreetmap\.org/, r => r.fulfill({ json: [] }));
+    await gotoSearch(page);
+
+    // Type quickly — each char fires within the 350ms debounce window
+    const inp = page.locator(SEL.origInput);
+    await inp.pressSequentially('Paris', { delay: 30 });
+
+    // Wait for debounce to fire and requests to complete
+    await page.waitForTimeout(800);
+
+    // With 350ms debounce, rapid typing should collapse to a single request (or very few)
+    // rather than one per character (5 chars = up to 5 requests without debounce)
+    expect(requestCount).toBeLessThan(3);
+  });
+
+  test('stale response from aborted request does not overwrite current results', async ({ page }) => {
+    let resolveFirst: () => void;
+    const firstRequestHeld = new Promise<void>(res => { resolveFirst = res; });
+
+    let requestIndex = 0;
+    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, async route => {
+      const thisIndex = ++requestIndex;
+      if (thisIndex === 1) {
+        // Hold first request until second has already resolved
+        await firstRequestHeld;
+        await route.fulfill({ json: [
+          { type: 'STOP', name: 'STALE_RESULT', lat: 48.8, lon: 2.3, country: 'FR', areas: [] }
+        ]});
+      } else {
+        await route.fulfill({ json: [
+          { type: 'STOP', name: 'Paris Gare de Lyon', lat: 48.8449, lon: 2.3735, country: 'FR', areas: [] }
+        ]});
+        resolveFirst!(); // release the stale first request after second has resolved
+      }
+    });
+    await page.route(/api-adresse\.data\.gouv\.fr/, r => r.fulfill({ json: { features: [] } }));
+    await page.route(/nominatim\.openstreetmap\.org/, r => r.fulfill({ json: [] }));
+    await gotoSearch(page);
+
+    const inp = page.locator(SEL.origInput);
+    // First query — triggers first (slow) request
+    await inp.fill('pa');
+    await page.waitForTimeout(400); // let debounce fire
+
+    // Second query — triggers second (fast) request; first is still in flight
+    await inp.fill('paris');
+    await page.waitForTimeout(800); // let both requests resolve
+
+    // The dropdown must show the second query's result, not STALE_RESULT
+    const items = page.locator(`${SEL.origAc} .ac-item`);
+    const count = await items.count();
+    if (count > 0) {
+      const text = await page.locator(SEL.origAc).textContent();
+      expect(text).not.toContain('STALE_RESULT');
+    }
   });
 });

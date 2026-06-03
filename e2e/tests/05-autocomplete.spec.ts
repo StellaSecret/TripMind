@@ -25,7 +25,7 @@ test.describe('Autocomplete — BAN @live', () => {
 
   test('single char does NOT trigger suggestions @live', async ({ page }) => {
     await page.locator(SEL.origInput).fill('P');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(600); // must exceed 350ms debounce + render margin
     await expect(page.locator(SEL.origAc)).not.toHaveClass(/visible/);
   });
 
