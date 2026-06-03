@@ -152,4 +152,68 @@ test.describe('API resilience', () => {
       expect(cls).not.toContain('loading');
     }
   });
+
+  // ── HTTP header policy compliance ─────────────────────────────────────────
+  // Browsers forbid setting User-Agent or Referer via fetch() — both are
+  // overridden by the browser itself (Referer becomes the page origin,
+  // User-Agent becomes the browser UA string). This is a browser security
+  // constraint, not a bug in the app code.
+  //
+  // Transitous policy allows Referer as a fallback when User-Agent cannot be
+  // set. In production (GitHub Pages), Transitous receives:
+  //   Referer: https://stellasecret.github.io/TripMind/
+  // which satisfies their policy. In tests the page runs at localhost, so
+  // Referer is "http://localhost:3000/" — we verify it is present and non-empty.
+
+  test('Transitous plan request sends a Referer header', async ({ page }) => {
+    await mockGoodConditions(page);
+    let capturedReferer: string | null = null;
+    await page.route(/api\.transitous\.org\/api\/v1\/plan/, async route => {
+      capturedReferer = route.request().headers()['referer'] ?? null;
+      await route.fulfill({ status: 200, json: [] });
+    });
+    await gotoSearch(page);
+    await page.locator(SEL.origInput).fill('Paris');
+    await page.locator(SEL.destInput).fill('Lyon');
+    await page.locator(SEL.analyzeBtn).click();
+    await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 15_000 });
+    // Referer must be present and non-empty — the browser sets it to the page origin.
+    expect(capturedReferer).not.toBeNull();
+    expect(capturedReferer!.length).toBeGreaterThan(0);
+  });
+
+  test('Transitous geocode request sends a Referer header', async ({ page }) => {
+    await mockGoodConditions(page);
+    let capturedReferer: string | null = null;
+    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, async route => {
+      capturedReferer = route.request().headers()['referer'] ?? null;
+      await route.fulfill({ status: 200, json: [] });
+    });
+    await gotoSearch(page);
+    await page.locator(SEL.origInput).fill('Paris');
+    await page.locator(SEL.destInput).fill('Lyon');
+    await page.locator(SEL.analyzeBtn).click();
+    await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 15_000 });
+    expect(capturedReferer).not.toBeNull();
+    expect(capturedReferer!.length).toBeGreaterThan(0);
+  });
+
+  test('Nominatim request sends a User-Agent header', async ({ page }) => {
+    await mockGoodConditions(page);
+    let capturedUA: string | null = null;
+    await page.route(/nominatim\.openstreetmap\.org/, async route => {
+      capturedUA = route.request().headers()['user-agent'] ?? null;
+      await route.fulfill({ status: 200, json: [] });
+    });
+    await gotoSearch(page);
+    await page.locator(SEL.origInput).fill('Paris');
+    await page.locator(SEL.destInput).fill('Lyon');
+    await page.locator(SEL.analyzeBtn).click();
+    await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 15_000 });
+    // Nominatim is only called as a geocoding fallback — only assert if intercepted.
+    // The browser sets User-Agent automatically; we verify it is present and non-empty.
+    if (capturedUA !== null) {
+      expect(capturedUA.length).toBeGreaterThan(0);
+    }
+  });
 });
