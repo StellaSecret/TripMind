@@ -749,7 +749,7 @@
       var url = 'https://api.transitous.org/api/v1/geocode?text=' +
                 encodeURIComponent(q) + '&size=6';
       return fetchWithTimeout(url,
-          { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind' } }, 3000)
+          { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind', 'User-Agent': TRANSITOUS_UA } }, 3000)
         .then(function(r) { return r.json(); })
         .then(function(results) {
           if (!Array.isArray(results)) return [];
@@ -867,7 +867,7 @@
       var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
       var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, 4000) : null;
       return rateLimitedFetch(url, {
-        headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0' },
+        headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0 (https://github.com/StellaSecret/TripMind; mailto:thaikhuevincent.nguyen@gmail.com)' },
         signal: ctrl ? ctrl.signal : undefined
       })
       .then(function(r) {
@@ -1000,7 +1000,7 @@
         var nomTimer = ctrl ? setTimeout(function() { ctrl.abort(); }, 5000) : null;
         return fetch('https://nominatim.openstreetmap.org/search?q=' +
                      encodeURIComponent(city) + '&format=json&limit=1&addressdetails=1',
-                     { headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0' },
+                     { headers: { 'Accept-Language': 'fr,en', 'User-Agent': 'TripMind/1.0 (https://github.com/StellaSecret/TripMind; mailto:thaikhuevincent.nguyen@gmail.com)' },
                        signal: ctrl ? ctrl.signal : undefined })
           .then(function(r2) {
             if (nomTimer) clearTimeout(nomTimer);
@@ -1034,7 +1034,7 @@
   function geocodeTransitous(city) {
     var url = 'https://api.transitous.org/api/v1/geocode?text=' +
               encodeURIComponent(city) + '&size=5';
-    return fetch(url, { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind' } })
+    return fetch(url, { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind', 'User-Agent': TRANSITOUS_UA } })
       .then(function(r) { if (!r.ok) throw new Error('Transitous geocode HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         if (!d || !d.length) throw new Error('"' + city + '" introuvable via Transitous');
@@ -1229,7 +1229,7 @@
    *
    * User-Agent REQUIS par la politique Transitous.
    ──────────────────────────────────────────────────── */
-  var TRANSITOUS_UA = 'TripMind/4.0 (https://github.com/StellaSecret/TripMind; contact via GitHub)';
+  var TRANSITOUS_UA = 'TripMind/1.0 (https://github.com/StellaSecret/TripMind; mailto:thaikhuevincent.nguyen@gmail.com)';
   var TRANSITOUS_TIMEOUT_MS = 12000; // 12s — au-delà Transitous est probablement surchargé
 
   /* Fetch avec timeout via AbortController */
@@ -1388,9 +1388,9 @@
       '&numItineraries=5' +
       '&transportModes=TRANSIT,WALK';
 
-    var headers = { 'Referer': 'https://github.com/StellaSecret/TripMind' };
-    // User-Agent non envoyable par les browsers dans les requêtes fetch cross-origin
-    // → on utilise Referer comme identifiant comme recommandé par Transitous
+    var headers = { 'Referer': 'https://github.com/StellaSecret/TripMind', 'User-Agent': TRANSITOUS_UA };
+    // User-Agent peut être ignoré par le browser en cross-origin, mais est envoyé correctement
+    // dans le WebView Android. Referer sert de fallback identifiant comme recommandé par Transitous.
 
     function doFetch() {
       return fetchWithTimeout(url, { headers: headers }, TRANSITOUS_TIMEOUT_MS)
