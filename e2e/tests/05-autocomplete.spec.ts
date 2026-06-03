@@ -74,4 +74,69 @@ test.describe('Autocomplete — BAN @live', () => {
     await page.waitForTimeout(400);
     await expect(page.locator(SEL.origAc)).not.toHaveClass(/visible/);
   });
+
+});
+
+/**
+ * Station direct search — mocked Transitous, no network required, runs in CI.
+ */
+import { test as stationTest, expect as stationExpect } from '@playwright/test';
+
+stationTest.describe('Autocomplete — station direct search', () => {
+
+  const MOCK_STOPS = [
+    { type: 'STOP', name: 'Paris-Austerlitz', lat: 48.8432, lon: 2.3652, country: 'FR', areas: [] },
+    { type: 'STOP', name: 'Paris-Gare-de-Lyon', lat: 48.8448, lon: 2.3735, country: 'FR', areas: [] },
+  ];
+
+  stationTest('typing a station name shows stop suggestions in dropdown', async ({ page }) => {
+    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
+      r.fulfill({ json: MOCK_STOPS }));
+    await page.goto('/');
+    await page.locator(SEL.origInput).fill('paris aust');
+    await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
+    await stationExpect(page.locator(`${SEL.origAc} .ac-item-stop`)).not.toHaveCount(0);
+  });
+
+  stationTest('stop items appear below a "Gares" separator', async ({ page }) => {
+    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
+      r.fulfill({ json: MOCK_STOPS }));
+    await page.goto('/');
+    await page.locator(SEL.origInput).fill('paris aust');
+    await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
+    const sep = page.locator(`${SEL.origAc} .ac-separator`);
+    await stationExpect(sep).toBeVisible();
+  });
+
+  stationTest('clicking a stop suggestion fills input and sets station coords', async ({ page }) => {
+    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
+      r.fulfill({ json: MOCK_STOPS }));
+    // Also mock BAN so no real network needed
+    await page.route(/api-adresse\.data\.gouv\.fr/, r =>
+      r.fulfill({ json: { features: [] } }));
+    await page.goto('/');
+    await page.locator(SEL.origInput).fill('paris aust');
+    await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
+    await page.locator(`${SEL.origAc} .ac-item-stop`).first().click();
+    // Dropdown must close after selection
+    await stationExpect(page.locator(SEL.origAc)).not.toHaveClass(/visible/);
+    // Input must be filled with the station name
+    const val = await page.locator(SEL.origInput).inputValue();
+    stationExpect(val).toContain('Austerlitz');
+  });
+
+  stationTest('selecting a stop directly skips the secondary station sub-picker', async ({ page }) => {
+    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
+      r.fulfill({ json: MOCK_STOPS }));
+    await page.route(/api-adresse\.data\.gouv\.fr/, r =>
+      r.fulfill({ json: { features: [] } }));
+    await page.goto('/');
+    await page.locator(SEL.origInput).fill('paris aust');
+    await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
+    await page.locator(`${SEL.origAc} .ac-item-stop`).first().click();
+    // Station sub-picker must NOT appear — station was already selected directly
+    const picker = page.locator('#orig-inp-stations');
+    const isVisible = await picker.isVisible().catch(() => false);
+    stationExpect(isVisible).toBe(false);
+  });
 });

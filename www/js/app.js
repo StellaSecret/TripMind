@@ -929,16 +929,19 @@
 
         var nomP = fetchNominatimAC(q);
 
-        Promise.all([banP, nomP]).then(function(results) {
-          var banFeatures = results[0];
-          var nomFeatures = results[1];
+        // Search Transitous stops in parallel — allows typing "gare de lyon",
+        // "paris austerlitz", etc. and selecting a station directly from the dropdown.
+        var stopP = fetchTransitousStops(q);
 
-          // Use BAN results first; supplement with Nominatim for non-French results
-          // Deduplicate by normalised city name
+        Promise.all([banP, nomP, stopP]).then(function(results) {
+          var banFeatures  = results[0];
+          var nomFeatures  = results[1];
+          var stopFeatures = results[2];
+
+          // Cities first (BAN then Nominatim), deduplicated; then stations appended after.
           var seen = {};
           var merged = [];
           banFeatures.forEach(function(f) {
-            // Deduplicate by full label (address) not just city name
             var key = (f.properties.label || f.properties.name || '').toLowerCase().trim();
             if (key && !seen[key]) { seen[key] = true; merged.push(f); }
           });
@@ -946,8 +949,10 @@
             var key = (f.properties.label || f.properties.name || '').toLowerCase().trim();
             if (key && !seen[key]) { seen[key] = true; merged.push(f); }
           });
-
-          renderList(merged.slice(0, 7));
+          // Cap cities at 4 to leave room for up to 4 station results below the separator.
+          var cityResults = merged.slice(0, 4);
+          var stopResults = stopFeatures.slice(0, 4);
+          renderList(cityResults.concat(stopResults));
         }).catch(function() { closeList(); });
       }, 150);
     });
