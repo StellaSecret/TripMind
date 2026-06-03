@@ -13,7 +13,7 @@ STAGED=$(git diff --cached --name-only)
 # 1. SECRET SCAN — block hardcoded tokens/keys before they land
 #    in git history (TruffleHog in CI is already too late)
 # ─────────────────────────────────────────────────────────────
-echo "🔍 [1/4] Scanning for secrets in staged files…"
+echo "🔍 [1/5] Scanning for secrets in staged files…"
 
 STAGED_SOURCE=$(echo "$STAGED" | grep -E '\.(js|ts|html|json|env)$' || true)
 
@@ -44,7 +44,7 @@ echo "   ✓ No secrets detected"
 # ─────────────────────────────────────────────────────────────
 # 2. JS SYNTAX CHECK — catch broken JS before a 3-min CI run
 # ─────────────────────────────────────────────────────────────
-echo "🔧 [2/4] Checking JS syntax…"
+echo "🔧 [2/5] Checking JS syntax…"
 
 STAGED_JS=$(echo "$STAGED" | grep '^www/.*\.js$' || true)
 HAS_ERROR=0
@@ -71,7 +71,7 @@ echo "   ✓ JS syntax OK"
 #    Tests: calcScore, LRUCache, classifyError, MODE_COSTS
 #    Skipped if unit/ deps not installed yet (first clone)
 # ─────────────────────────────────────────────────────────────
-echo "🧪 [3/4] Running unit tests…"
+echo "🧪 [3/5] Running unit tests…"
 
 UNIT_DIR="$ROOT/unit"
 STAGED_UNIT=$(echo "$STAGED" | grep -E '^(www/js/|unit/)' || true)
@@ -97,7 +97,7 @@ fi
 #    neither e2e/tests/ nor unit/tests/ was staged
 #    (warning only, does not block)
 # ─────────────────────────────────────────────────────────────
-echo "📋 [4/4] Checking test coverage…"
+echo "📋 [4/5] Checking test coverage…"
 
 WWW_CHANGED=$(echo "$STAGED" | grep '^www/js/' || true)
 E2E_CHANGED=$(echo "$STAGED" | grep '^e2e/tests/' || true)
@@ -112,6 +112,30 @@ if [ -n "$WWW_CHANGED" ] && [ -z "$E2E_CHANGED" ] && [ -z "$UNIT_CHANGED" ]; the
   echo ""
 else
   echo "   ✓ Test files look up to date"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# 5. CAP SYNC REMINDER — warn if www/ changed but android/ was
+#    not synced (i.e. no android/ file is staged alongside it)
+#    Capacitor copies www/ into the Android asset bundle; without
+#    a sync the APK will ship the old JS.
+#    (warning only, does not block — sync happens at build time)
+# ─────────────────────────────────────────────────────────────
+echo "📱 [5/5] Checking Capacitor sync…"
+
+WWW_CHANGED_CAP=$(echo "$STAGED" | grep '^www/' || true)
+ANDROID_CHANGED=$(echo "$STAGED" | grep '^android/' || true)
+
+if [ -n "$WWW_CHANGED_CAP" ] && [ -z "$ANDROID_CHANGED" ]; then
+  echo ""
+  echo "⚠️  WARNING: www/ modified but no android/ files staged."
+  echo "   Changed: $(echo "$WWW_CHANGED_CAP" | tr '\n' ' ')"
+  echo "   Run 'npx cap sync android' before building the APK,"
+  echo "   otherwise the Android app will ship the old www/ bundle."
+  echo "   (Warning only — commit proceeds)"
+  echo ""
+else
+  echo "   ✓ Capacitor sync looks up to date"
 fi
 
 echo ""

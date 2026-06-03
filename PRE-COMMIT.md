@@ -19,6 +19,7 @@ npm install          # installs vitest for unit tests
 | 2 | **JS syntax** — `node --check` on every staged `www/js/*.js` file | ✅ Yes |
 | 3 | **Unit tests** — Vitest suite for `calcScore`, `LRUCache`, `classifyError`, `MODE_COSTS` (~2s) | ✅ Yes |
 | 4 | **Test coverage reminder** — warns if `www/js/` changed but neither `e2e/tests/` nor `unit/tests/` staged | ⚠️ Warning only |
+| 5 | **Capacitor sync reminder** — warns if `www/` changed but no `android/` file is staged (run `npx cap sync android` before building) | ⚠️ Warning only |
 
 Unit tests are skipped automatically if `unit/node_modules` is not installed yet (e.g. first clone).
 Run `cd unit && npm install` to enable them.
