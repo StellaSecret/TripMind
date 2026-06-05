@@ -3,6 +3,8 @@ name: CI/CD TripMind
 on:
   push:
     branches: [main]
+    tags:
+      - 'release/*'      # Triggers full pipeline + unblocks the release job
   schedule:
     - cron: '0 2 9 * *'  # Every 9th of the month at 02:00 UTC — runs @live Playwright tests
   workflow_dispatch:
@@ -259,11 +261,24 @@ jobs:
           path: dist/
           retention-days: 30
 
-  # ── RELEASE GITHUB (Attend le build) ───────────────────
+  # ── RELEASE GITHUB (Attend le build + approbation manuelle) ──
+  # Deux verrous indépendants — les deux doivent être levés pour publier :
+  #
+  # 1. YAML guard : le job ne s'exécute que si le commit est tagué "release/*"
+  #    → pour déclencher : git tag release/1.0 && git push --tags
+  #
+  # 2. Environment gate : une fois le tag présent, le job s'arrête et attend
+  #    un clic "Approve" dans Actions → ce run → Review deployments.
+  #    → pour activer : Settings → Environments → New → "release"
+  #                     cocher "Required reviewers" et s'ajouter
+  #
+  # Sans le tag, le job est skippé même si l'environment n'est pas configuré.
   release:
     name: Create Release
     needs: build-android
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/release/')
+    environment: release        # ← pause ici jusqu'à approbation manuelle
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
