@@ -614,7 +614,9 @@
    * Queues requests and enforces a minimum gap between calls per domain.
    * ─────────────────────────────────────────────────────────────────── */
   var RATE_LIMITS = {
-    'nominatim.openstreetmap.org': { minGapMs: 1100, lastCall: 0, queue: [] }
+    'nominatim.openstreetmap.org': { minGapMs: 1100, lastCall: 0, queue: [] },
+    // BAN has no official rate limit, but 10 req/s is a safe courtesy cap
+    'api-adresse.data.gouv.fr':    { minGapMs: 100,  lastCall: 0, queue: [] }
   };
 
   function rateLimitedFetch(url, opts) {
@@ -933,12 +935,12 @@
         // For longer queries that look like addresses (contain digits or spaces+words):
         // also fetch housenumber results so full addresses appear.
         var looksLikeAddress = q.length >= 5 && /\d/.test(q);
-        var banMunicipalityP = fetch(banBase + '&type=municipality&limit=4', { signal: signal })
+        var banMunicipalityP = rateLimitedFetch(banBase + '&type=municipality&limit=4', { signal: signal })
           .then(function(r) { return r.json(); })
           .then(function(d) { return d.features || []; })
           .catch(function() { return []; });
         var banAddressP = looksLikeAddress
-          ? fetch(banBase + '&type=housenumber&limit=5', { signal: signal })
+          ? rateLimitedFetch(banBase + '&type=housenumber&limit=5', { signal: signal })
               .then(function(r) { return r.json(); })
               .then(function(d) { return d.features || []; })
               .catch(function() { return []; })
@@ -1013,7 +1015,7 @@
   /* ─── API : Géocodage BAN + Nominatim (monde) ───── */
   function geocodeBAN(city) {
     // 1. Try BAN (France) — best accuracy for French cities & train stations
-    return fetch('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(city) +
+    return rateLimitedFetch('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(city) +
                  '&type=municipality&limit=1&autocomplete=1')
       .then(function(r) { if (!r.ok) throw new Error('BAN HTTP ' + r.status); return r.json(); })
       .then(function(d) {
