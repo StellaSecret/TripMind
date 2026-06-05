@@ -204,7 +204,7 @@ jobs:
           path: ./www
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # ── BUILD ANDROID (Bloqué par unit + playwright) ────────
   build-android:
