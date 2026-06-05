@@ -259,11 +259,20 @@ jobs:
           path: dist/
           retention-days: 30
 
-  # ── RELEASE GITHUB (Attend le build) ───────────────────
+  # ── RELEASE GITHUB (Attend le build + approbation manuelle) ──
+  # Deux verrous indépendants — les deux doivent être levés pour publier :
+  #
+  # Environment gate : le job s'arrête et attend
+  # un clic "Approve" dans Actions → ce run → Review deployments.
+  # → pour activer : Settings → Environments → New → "release"
+  #                  cocher "Required reviewers" et s'ajouter
+  #
+  # Sans le tag, le job est skippé même si l'environment n'est pas configuré.
   release:
     name: Create Release
     needs: build-android
     runs-on: ubuntu-latest
+    environment: release        # ← pause ici jusqu'à approbation manuelle
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
