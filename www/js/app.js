@@ -634,9 +634,25 @@
   function drainQueue(rl) {
     if (!rl.queue.length) return;
     var item = rl.queue[0];
+
+    // Skip items whose AbortSignal was already triggered — don't waste a rate-limit slot
+    if (item.opts && item.opts.signal && item.opts.signal.aborted) {
+      item.reject(new DOMException('Aborted', 'AbortError'));
+      rl.queue.shift();
+      drainQueue(rl); // immediately process next item, no delay
+      return;
+    }
+
     var now = Date.now();
     var wait = Math.max(0, rl.minGapMs - (now - rl.lastCall));
     setTimeout(function() {
+      // Re-check abort after the wait — signal may have fired during the delay
+      if (item.opts && item.opts.signal && item.opts.signal.aborted) {
+        item.reject(new DOMException('Aborted', 'AbortError'));
+        rl.queue.shift();
+        drainQueue(rl);
+        return;
+      }
       rl.lastCall = Date.now();
       fetch(item.url, item.opts)
         .then(item.resolve, item.reject)

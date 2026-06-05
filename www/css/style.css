@@ -51,7 +51,7 @@ a{color:var(--blue)}
 
 /* ── App shell ─────────────────────────────────────── */
 .app{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg0);position:relative;padding-top:env(safe-area-inset-top,0px)}
-.scr{display:none}
+.scr{display:none;position:absolute;top:0;left:0;right:0;min-height:100vh}
 .scr.on{display:block}
 
 /* ── Search ────────────────────────────────────────── */
