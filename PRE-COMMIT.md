@@ -11,7 +11,7 @@ cd ../unit
 npm install          # installs vitest for unit tests
 ```
 
-## What it checks (< 15 seconds)
+## What it checks (< 20 seconds)
 
 | # | Check | Blocks commit? |
 |---|---|---|

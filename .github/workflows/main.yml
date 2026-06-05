@@ -3,6 +3,8 @@ name: CI/CD TripMind
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '0 2 9 * *'  # Every 9th of the month at 02:00 UTC — runs @live Playwright tests
   workflow_dispatch:
 
 permissions:
@@ -140,6 +142,48 @@ jobs:
           path: e2e/test-results/
           retention-days: 7
 
+
+  # ── TESTS @LIVE NOCTURNES (Playwright — vraie réseau) ──
+  # Tourne chaque 9 du mois à 02h00 UTC pour détecter les régressions
+  # dues aux changements d'API Transitous / Nominatim / BAN.
+  playwright-live-tests:
+    name: Live API Tests (nightly)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Serve app on port 3000
+        run: |
+          npm ci
+          npx serve www --listen 3000 &
+          timeout 30 bash -c 'until curl -sf http://localhost:3000 > /dev/null; do sleep 1; done'
+
+      - name: Run @live tests (Chromium)
+        working-directory: e2e
+        run: npx --no playwright test --grep "@live" --project=chromium
+        env:
+          BASE_URL: http://localhost:3000
+          CI: true
+
+      - name: Upload live test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-live-report-${{ github.run_number }}
+          path: e2e/playwright-report/
+          retention-days: 7
+
   # ── DÉPLOIEMENT PAGES (Bloqué par unit + playwright) ───
   deploy-pages:
     name: Deploy to GitHub Pages
@@ -191,7 +235,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          VCODE=$((16 + ${{ github.run_number }}))
+          VCODE=$(date -u +%Y%m%d)${{ github.run_number }}
           sed -i "s/versionCode .*/versionCode $VCODE/" app/build.gradle
           ./gradlew bundleRelease assembleRelease --no-daemon \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/tripmind-release.jks \
@@ -213,7 +257,7 @@ jobs:
         with:
           name: artifacts-${{ github.run_number }}
           path: dist/
-          retention-days: 1
+          retention-days: 30
 
   # ── RELEASE GITHUB (Attend le build) ───────────────────
   release:
