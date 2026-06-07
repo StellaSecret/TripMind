@@ -80,6 +80,60 @@ describe('trainCost', () => {
     const { co2kg } = trainCost(462);
     expect(co2kg).toBeLessThan(1); // < 1kg for Paris→Lyon
   });
+
+  // ── Boundary tests ────────────────────────────────────────────────────────
+
+  it('boundary 149km → TER pricing (below tgvThresholdKm)', () => {
+    const { eur } = trainCost(MODE_COSTS.train.tgvThresholdKm - 1);
+    // Should use TER formula: max(terMin, dist * terEurPerKm)
+    const expected = Math.round(
+      Math.max(MODE_COSTS.train.terMin, (MODE_COSTS.train.tgvThresholdKm - 1) * MODE_COSTS.train.terEurPerKm)
+    );
+    expect(eur).toBe(expected);
+    expect(eur).toBeLessThan(MODE_COSTS.train.tgvMin);
+  });
+
+  it('boundary 150km → TGV pricing (at tgvThresholdKm)', () => {
+    const { eur } = trainCost(MODE_COSTS.train.tgvThresholdKm);
+    // Should use TGV formula: clamp(tgvMin, dist * tgvEurPerKm, tgvMax)
+    const expected = Math.round(
+      Math.min(MODE_COSTS.train.tgvMax, Math.max(MODE_COSTS.train.tgvMin, MODE_COSTS.train.tgvThresholdKm * MODE_COSTS.train.tgvEurPerKm))
+    );
+    expect(eur).toBe(expected);
+    expect(eur).toBeGreaterThanOrEqual(MODE_COSTS.train.tgvMin);
+  });
+
+  it('TGV cost is clamped to tgvMin for short TGV distances', () => {
+    // A distance just above threshold where dist * tgvEurPerKm < tgvMin
+    const shortTgv = MODE_COSTS.train.tgvThresholdKm; // 150km * 0.12 = 18 < tgvMin 25
+    const { eur } = trainCost(shortTgv);
+    expect(eur).toBe(MODE_COSTS.train.tgvMin);
+  });
+
+  it('TGV cost is clamped to tgvMax for very long distances', () => {
+    // dist where dist * tgvEurPerKm > tgvMax: tgvMax/tgvEurPerKm = 90/0.12 = 750km
+    const { eur } = trainCost(800);
+    expect(eur).toBe(MODE_COSTS.train.tgvMax);
+  });
+
+  it('CO2 scales linearly with distance', () => {
+    const c = MODE_COSTS.train;
+    const dist100 = trainCost(100).co2kg;
+    const dist200 = trainCost(200).co2kg;
+    expect(dist200).toBeCloseTo(dist100 * 2, 2);
+  });
+
+  it('CO2 value matches formula exactly for a known distance', () => {
+    // 300km: 1.7g/km * 300 / 1000 = 0.51kg
+    const { co2kg } = trainCost(300);
+    expect(co2kg).toBeCloseTo(+(MODE_COSTS.train.co2gPerKm * 300 / 1000).toFixed(2), 5);
+  });
+
+  it('TER cost does not exceed tgvMin just below threshold', () => {
+    // Ensures TER pricing never accidentally exceeds TGV minimum at the boundary
+    const { eur } = trainCost(MODE_COSTS.train.tgvThresholdKm - 1);
+    expect(eur).toBeLessThan(MODE_COSTS.train.tgvMin);
+  });
 });
 
 describe('busCost', () => {

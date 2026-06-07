@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcScore, scLbl, SCORE_WEIGHTS } from '../lib/score';
+import { calcScore, scLbl, SCORE_WEIGHTS, type Lang } from '../lib/score';
 
 describe('calcScore — weather thresholds', () => {
   const clearAQ = { aqi: 0, polMax: 0 };
@@ -128,13 +128,42 @@ describe('calcScore — combined scenarios matching Playwright tests', () => {
   });
 });
 
-describe('scLbl', () => {
+describe('scLbl — French (default)', () => {
   it('75 → Bonnes conditions', () => expect(scLbl(75)).toBe('Bonnes conditions'));
   it('100 → Bonnes conditions', () => expect(scLbl(100)).toBe('Bonnes conditions'));
   it('74 → Conditions moyennes', () => expect(scLbl(74)).toBe('Conditions moyennes'));
   it('50 → Conditions moyennes', () => expect(scLbl(50)).toBe('Conditions moyennes'));
   it('49 → Conditions dégradées', () => expect(scLbl(49)).toBe('Conditions dégradées'));
   it('5 → Conditions dégradées', () => expect(scLbl(5)).toBe('Conditions dégradées'));
+
+  it('explicit lang="fr" matches default', () => {
+    expect(scLbl(80, 'fr')).toBe(scLbl(80));
+    expect(scLbl(60, 'fr')).toBe(scLbl(60));
+    expect(scLbl(30, 'fr')).toBe(scLbl(30));
+  });
+});
+
+describe('scLbl — English', () => {
+  it('75 → Good conditions', () => expect(scLbl(75, 'en')).toBe('Good conditions'));
+  it('100 → Good conditions', () => expect(scLbl(100, 'en')).toBe('Good conditions'));
+  it('74 → Average conditions', () => expect(scLbl(74, 'en')).toBe('Average conditions'));
+  it('50 → Average conditions', () => expect(scLbl(50, 'en')).toBe('Average conditions'));
+  it('49 → Poor conditions', () => expect(scLbl(49, 'en')).toBe('Poor conditions'));
+  it('5 → Poor conditions', () => expect(scLbl(5, 'en')).toBe('Poor conditions'));
+});
+
+describe('scLbl — boundary scores', () => {
+  const langs: Lang[] = ['fr', 'en'];
+  for (const lang of langs) {
+    it(`score 75 is "good" in ${lang}`, () => {
+      const label = scLbl(75, lang);
+      expect(label).not.toBe(scLbl(74, lang));
+    });
+    it(`score 50 is "average" in ${lang}`, () => {
+      const label = scLbl(50, lang);
+      expect(label).not.toBe(scLbl(49, lang));
+    });
+  }
 });
 
 describe('SCORE_WEIGHTS — structure', () => {

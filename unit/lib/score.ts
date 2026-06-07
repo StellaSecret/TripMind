@@ -53,8 +53,20 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
   return Math.max(5, Math.min(100, Math.round(s)));
 }
 
-export function scLbl(s: number): string {
-  if (s >= 75) return 'Bonnes conditions';
-  if (s >= 50) return 'Conditions moyennes';
-  return 'Conditions dégradées';
+export type Lang = 'fr' | 'en';
+
+const SC_LABELS: Record<Lang, [string, string, string]> = {
+  fr: ['Bonnes conditions',  'Conditions moyennes', 'Conditions dégradées'],
+  en: ['Good conditions',    'Average conditions',  'Poor conditions'],
+};
+
+/** Returns a human-readable label for a score.
+ *  @param s    Score value (5–100)
+ *  @param lang 'fr' (default) or 'en'
+ */
+export function scLbl(s: number, lang: Lang = 'fr'): string {
+  const [good, avg, poor] = SC_LABELS[lang];
+  if (s >= 75) return good;
+  if (s >= 50) return avg;
+  return poor;
 }
