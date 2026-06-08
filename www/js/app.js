@@ -117,6 +117,7 @@
       trainsFuture: function(label, hour) { return '📅 Trains du '+label+' à partir de '+(hour||'08')+'h00'; },
       trainsDep: 'Dép.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' corresp.'; },
+      trainsChange: 'Correspondance', trainsWait: function(m) { return 'Attente '+m+' min'; },
       trainsRealtime: '🟢 Temps réel',
       trainsOfficialTitle: '📱 Ressources officielles',
       trainsCarAlt: '🚗 Alternative voiture',
@@ -271,6 +272,7 @@
       trainsFuture: function(label, hour) { return '📅 Trains on '+label+' from '+(hour||'08')+':00'; },
       trainsDep: 'Dep.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' change'+(n>1?'s':''); },
+      trainsChange: 'Change', trainsWait: function(m) { return 'Wait '+m+' min'; },
       trainsRealtime: '🟢 Real-time',
       trainsOfficialTitle: '📱 Official resources',
       trainsCarAlt: '🚗 Car alternative',
@@ -1346,9 +1348,20 @@
       var fl = ptLegsAll[0];
       // Clé = mode + heure de départ du premier leg TP uniquement.
       // L'endTime du premier leg peut varier selon la variante (arrêt intermédiaire différent).
-      var key = (fl.mode||'') + '|' + (fl.startTime||'');
+      // Use tripId when available — delayed trains share the same tripId but have
+      // different startTime (scheduled vs real-time), so startTime-based dedup misses them.
+      // Note: serviceDate is always empty in Transitous responses; the date is embedded
+      // in the tripId itself (e.g. "20260609_07:41_..."), so tripId alone is sufficient.
+      // This fix only triggers on disrupted days when realTime legs are present — on clean
+      // days all itineraries have distinct tripIds and the fallback path is never hit.
+      var key = fl.tripId
+        ? (fl.tripId + '|' + (fl.serviceDate || ''))
+        : ((fl.mode||'') + '|' + (fl.startTime||''));
       var existing = firstLegMap[key];
-      if (!existing || (it.transfers||0) < (existing.transfers||0)) {
+      var itRt = it.legs.some(function(l){ return l.realTime; });
+      var exRt = existing && existing.legs.some(function(l){ return l.realTime; });
+      var fewerTransfers = (it.transfers != null ? it.transfers : 99) < (existing && existing.transfers != null ? existing.transfers : 99);
+      if (!existing || (!exRt && itRt) || (exRt === itRt && fewerTransfers)) {
         firstLegMap[key] = it;
       }
     });
@@ -1394,6 +1407,33 @@
                 : destName ? mode + ' → ' + destName
                 :            mode;
 
+      var numTransfers = (it.transfers != null) ? it.transfers : Math.max(0, ptLegs.length - 1);
+
+      /* Build per-leg details for connections (only when there are transfers) */
+      var legDetails = numTransfers > 0 ? ptLegs.map(function(l, idx) {
+        var lDep  = isoToHHMM((l.from && l.from.departure) || l.startTime || '');
+        var lArr  = isoToHHMM((l.to   && l.to.arrival)     || l.endTime   || '');
+        var lFrom = (l.from && l.from.name && l.from.name !== 'START') ? l.from.name : '';
+        var lTo   = (l.to   && l.to.name   && l.to.name   !== 'END')   ? l.to.name   : '';
+        var lHs   = l.headsign || '';
+        var lHsClean = isGtfsCode(lHs) ? '' : lHs;
+        var lMode = modeToLabel(l.mode || '');
+        var lLabel = lHsClean ? lMode + ' ' + lHsClean : lMode;
+
+        /* Wait time before this leg = arrival of previous leg → departure of this one */
+        var waitMin = 0;
+        if (idx > 0) {
+          var prevArr  = (ptLegs[idx-1].to && ptLegs[idx-1].to.arrival) || ptLegs[idx-1].endTime || '';
+          var thisDep  = (l.from && l.from.departure) || l.startTime || '';
+          if (prevArr && thisDep) {
+            var diff = (new Date(thisDep) - new Date(prevArr)) / 60000;
+            if (diff > 0 && diff < 180) waitMin = Math.round(diff);
+          }
+        }
+
+        return { label: lLabel, from: lFrom, to: lTo, depart: lDep, arrivee: lArr, waitMin: waitMin };
+      }) : [];
+
       return {
         // from.departure / to.arrival = heure réelle en gare (scheduled stop time)
         // first.startTime peut inclure un décalage de marche → on préfère from.departure
@@ -1402,11 +1442,12 @@
         // Durée = uniquement le temps en transport (sans marche initiale/finale)
         duree:     fmtDur(ptLegs.reduce(function(acc, l) {
                      return acc + (l.duration || 0);
-                   }, 0) + (it.transfers || 0) * 180), // +3 min par correspondance estimée
+                   }, 0) + numTransfers * 180), // +3 min par correspondance estimée
         numero:    label,
-        transfers: it.transfers || Math.max(0, ptLegs.length - 1),
+        transfers: numTransfers,
         fiabilite: modeToReliab(first.mode || ''),
-        realTime:  ptLegs.some(function(l) { return l.realTime; })
+        realTime:  ptLegs.some(function(l) { return l.realTime; }),
+        legs:      legDetails
       };
     });
 
@@ -1938,7 +1979,24 @@
     } else if (trains.trains && trains.trains.length) {
       tH=(off>0?'<div class="info-note" style="margin-bottom:8px">'+t('trainsFuture')(dateLabel(selectedDate),pad(selectedTrainHour))+'</div>':'')+
         trains.trains.map(function(tr,i){
-          return '<div class="tc">'+
+          var legsHtml = '';
+          if (tr.transfers > 0 && tr.legs && tr.legs.length) {
+            legsHtml = '<div class="tlegs">'+
+              tr.legs.map(function(leg, idx) {
+                var waitHtml = (idx > 0 && leg.waitMin > 0)
+                  ? '<div class="tleg-wait">⇄ '+t('trainsChange')+' · '+t('trainsWait')(leg.waitMin)+'</div>'
+                  : (idx > 0 ? '<div class="tleg-wait">⇄ '+t('trainsChange')+'</div>' : '');
+                return waitHtml+
+                  '<div class="tleg-row">'+
+                  '<div class="tleg-times"><span class="tleg-t">'+leg.depart+'</span><span class="tleg-arr">'+leg.arrivee+'</span></div>'+
+                  '<div class="tleg-info">'+
+                  '<div class="tleg-label">'+leg.label+'</div>'+
+                  (leg.from ? '<div class="tleg-stop">'+leg.from+(leg.to ? ' → '+leg.to : '')+'</div>' : '')+
+                  '</div></div>';
+              }).join('')+
+            '</div>';
+          }
+          return '<div class="tc'+(tr.transfers>0?' tc-expand':'')+'">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
             '<div><div class="ttime">'+tr.depart+'</div>'+
             '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">'+t('trainsDep')+'</div></div>'+
@@ -1957,7 +2015,7 @@
                 '<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>'
               : '</div>'  /* no fake reliability bar without realtime data */
             )+
-            '</div></div>';
+            '</div></div>'+legsHtml+'</div>';
         }).join('');
     } else {
       tH='<div style="padding:8px;font-size:.75rem;color:var(--t3)">Aucun résultat.</div>';
