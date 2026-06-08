@@ -14,10 +14,6 @@ permissions:
   security-events: write
   actions: read
 
-concurrency:
-  group: "pages-and-build"
-  cancel-in-progress: false
-
 jobs:
   # ── SÉCURITÉ 1 : SCAN DE SECRETS ───────────────────────
   scan-secrets:
@@ -147,7 +143,7 @@ jobs:
   # Tourne chaque 9 du mois à 02h00 UTC pour détecter les régressions
   # dues aux changements d'API Transitous / Nominatim / BAN.
   playwright-live-tests:
-    name: Live API Tests (nightly)
+    name: Live API Tests (monthly)
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:

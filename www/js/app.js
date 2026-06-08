@@ -117,6 +117,7 @@
       trainsFuture: function(label, hour) { return '📅 Trains du '+label+' à partir de '+(hour||'08')+'h00'; },
       trainsDep: 'Dép.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' corresp.'; },
+      trainsChange: 'Correspondance', trainsWait: function(m) { return 'Attente '+m+' min'; },
       trainsRealtime: '🟢 Temps réel',
       trainsOfficialTitle: '📱 Ressources officielles',
       trainsCarAlt: '🚗 Alternative voiture',
@@ -271,6 +272,7 @@
       trainsFuture: function(label, hour) { return '📅 Trains on '+label+' from '+(hour||'08')+':00'; },
       trainsDep: 'Dep.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' change'+(n>1?'s':''); },
+      trainsChange: 'Change', trainsWait: function(m) { return 'Wait '+m+' min'; },
       trainsRealtime: '🟢 Real-time',
       trainsOfficialTitle: '📱 Official resources',
       trainsCarAlt: '🚗 Car alternative',
@@ -1338,21 +1340,37 @@
     // "même premier train".
     var firstLegMap = {}; // key → itinéraire retenu
     ptItins.forEach(function(it) {
+      // Dedup key: first MAINLINE leg's tripId+startTime.
+      // - Same train, different metro suffix → same tripId + same startTime → one entry kept.
+      // - Delayed train (disruption day): same tripId, different startTime → kept separately
+      //   then the real-time entry wins via the tie-break below.
+      var MAINLINE_DEDUP = ['REGIONAL_RAIL','RAIL','INTERCITY_RAIL','LONG_DISTANCE','COACH','TRANSIT'];
       var ptLegsAll = it.legs.filter(function(l) {
-        var m = (l.mode || '').toUpperCase();
-        return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
+        return MAINLINE_DEDUP.indexOf((l.mode || '').toUpperCase()) >= 0;
       });
+      if (!ptLegsAll.length) {
+        ptLegsAll = it.legs.filter(function(l) {
+          var m = (l.mode || '').toUpperCase();
+          return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
+        });
+      }
       if (!ptLegsAll.length) return;
       var fl = ptLegsAll[0];
-      // Clé = mode + heure de départ du premier leg TP uniquement.
-      // L'endTime du premier leg peut varier selon la variante (arrêt intermédiaire différent).
-      var key = (fl.mode||'') + '|' + (fl.startTime||'');
+      // Key = tripId + scheduled startTime. Two itineraries with the same first mainline
+      // train but different metro/tram tails share the same key and get merged.
+      // On disruption days, a delayed entry has the same tripId but different startTime —
+      // both keys exist; the real-time entry wins via the tie-break below.
+      var key = (fl.tripId || (fl.mode + '|' + fl.startTime)) + '|' + (fl.startTime || '');
       var existing = firstLegMap[key];
-      if (!existing || (it.transfers||0) < (existing.transfers||0)) {
+      var itRt = it.legs.some(function(l){ return l.realTime; });
+      var exRt = existing && existing.legs.some(function(l){ return l.realTime; });
+      var itTransfers = Math.max(0, ptLegsAll.length - 1);
+      var exTransfers = existing ? Math.max(0, existing.legs.filter(function(l){return MAINLINE_DEDUP.indexOf((l.mode||'').toUpperCase())>=0;}).length - 1) : 99;
+      if (!existing || (!exRt && itRt) || (exRt === itRt && itTransfers < exTransfers)) {
         firstLegMap[key] = it;
       }
     });
-    var deduped = Object.values(firstLegMap)
+    var dedupedAll = Object.values(firstLegMap)
       // Re-trier par heure de départ du premier leg TP croissante
       .sort(function(a, b) {
         var aLegs = a.legs.filter(function(l){var m=(l.mode||'').toUpperCase();return m!=='WALK'&&m!=='BICYCLE'&&m!=='CAR';});
@@ -1362,23 +1380,63 @@
         return at < bt ? -1 : at > bt ? 1 : 0;
       });
 
-    var trains = deduped.slice(0, 3).map(function(it) {
-      var ptLegs = it.legs.filter(function(l) {
+    // Outlier filter: reject itineraries whose PT duration is less than 30% of the
+    // median PT duration. This removes ghost fast trips (replacement buses, TRANSIT
+    // mode shuttles) that slip through when Transitous mislabels short legs.
+    function ptDuration(it) {
+      return it.legs.reduce(function(s, l) {
         var m = (l.mode || '').toUpperCase();
-        return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
+        return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR' ? s + (l.duration || 0) : s;
+      }, 0);
+    }
+    var durations = dedupedAll.map(ptDuration).filter(function(d){ return d > 0; }).sort(function(a,b){return a-b;});
+    var medianDur = durations.length ? durations[Math.floor(durations.length / 2)] : 0;
+    var deduped = medianDur > 0
+      ? dedupedAll.filter(function(it){ return ptDuration(it) >= medianDur * 0.40; })
+      : dedupedAll;
+
+    var trains = deduped.slice(0, 3).map(function(it) {
+      // Mainline PT legs only — exclude walk, bike, car AND metro/tram/subway/ferry.
+      // Metro/tram are last-mile hops MOTIS adds for urban destinations; they inflate
+      // transfer counts and clutter the leg breakdown with irrelevant urban segments.
+      var MAINLINE = ['REGIONAL_RAIL','RAIL','INTERCITY_RAIL','LONG_DISTANCE','COACH','TRANSIT'];
+      var ptLegs = it.legs.filter(function(l) {
+        return MAINLINE.indexOf((l.mode || '').toUpperCase()) >= 0;
       });
+      // Fallback: pure urban itinerary with no mainline legs — use all non-walk PT
+      if (!ptLegs.length) {
+        ptLegs = it.legs.filter(function(l) {
+          var m = (l.mode || '').toUpperCase();
+          return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
+        });
+      }
       var first = ptLegs[0] || {};
       var last  = ptLegs[ptLegs.length - 1] || {};
 
       /* Nettoyage du headsign
        * Codes internes GTFS à rejeter : "VETO", "SARA", "860584", "TER01"…
-       * Règle : uniquement chiffres/majuscules/tirets, sans espace, ≤ 8 chars */
-      function isGtfsCode(s) {
-        return s.length >= 1 && s.length <= 8 && /^[A-Z0-9\-_]+$/.test(s);
+       * Règle : uniquement chiffres/majuscules/tirets, sans espace, ≤ 8 chars.
+       * On rejette aussi les noms de gare comme headsign (ex: "Juvisy", "Pont du Garigliano")
+       * — heuristique : commence par majuscule+minuscules, pas de chiffres. */
+      function isInternalId(s) {
+        // Reject internal GTFS/MOTIS IDs that are not human-readable.
+        // Keep: "VETO", "SARA" (2-6 uppercase letters = operator codes shown on boards)
+        //        "860584" (pure digits = train number, shown on tickets/SNCF Connect)
+        //        "Pont du Garigliano – Hôpital..." (multi-word destination)
+        // Reject: "OCESN860584F1187_F:TER:FR:..." (contains _ or :)
+        //         "IDFM:TN:SNCF:c35ed1de-..."     (UUID-like, contains :)
+        //         "Juvisy", "Massy"                (single capitalised word = station name)
+        if (s.indexOf(':') >= 0 || s.indexOf('_') >= 0) return true;  // GTFS composite ID
+        if (s.length > 60) return true;                                 // too long to be useful (real names rarely exceed 60)
+        return false;
+      }
+      function isStationName(s) {
+        // Single capitalised word with no digits/spaces = leaked intermediate station name.
+        return /^[A-ZÀÂÉÈÊËÎÏÔÙÛÜÇ][a-zàâéèêëîïôùûüç]+$/.test(s);
       }
 
       var hs = first.headsign || '';
-      var hsClean = isGtfsCode(hs) ? '' : hs;
+      var hsClean = (isInternalId(hs) || isStationName(hs)) ? '' : hs;
 
       /* Si pas de headsign lisible, utiliser le nom de la gare d'arrivée
        * du dernier leg TP (ex: "Paris Gare de Lyon") */
@@ -1394,6 +1452,34 @@
                 : destName ? mode + ' → ' + destName
                 :            mode;
 
+      // Recompute transfers from mainline legs only — it.transfers includes metro/tram hops
+      var numTransfers = Math.max(0, ptLegs.length - 1);
+
+      /* Build per-leg details for connections (only when there are transfers) */
+      var legDetails = numTransfers > 0 ? ptLegs.map(function(l, idx) {
+        var lDep  = isoToHHMM((l.from && l.from.departure) || l.startTime || '');
+        var lArr  = isoToHHMM((l.to   && l.to.arrival)     || l.endTime   || '');
+        var lFrom = (l.from && l.from.name && l.from.name !== 'START') ? l.from.name : '';
+        var lTo   = (l.to   && l.to.name   && l.to.name   !== 'END')   ? l.to.name   : '';
+        var lHs   = l.headsign || '';
+        var lHsClean = (isInternalId(lHs) || isStationName(lHs)) ? '' : lHs;
+        var lMode = modeToLabel(l.mode || '');
+        var lLabel = lHsClean ? lMode + ' ' + lHsClean : lMode;
+
+        /* Wait time before this leg = arrival of previous leg → departure of this one */
+        var waitMin = 0;
+        if (idx > 0) {
+          var prevArr  = (ptLegs[idx-1].to && ptLegs[idx-1].to.arrival) || ptLegs[idx-1].endTime || '';
+          var thisDep  = (l.from && l.from.departure) || l.startTime || '';
+          if (prevArr && thisDep) {
+            var diff = (new Date(thisDep) - new Date(prevArr)) / 60000;
+            if (diff > 0 && diff < 180) waitMin = Math.round(diff);
+          }
+        }
+
+        return { label: lLabel, from: lFrom, to: lTo, depart: lDep, arrivee: lArr, waitMin: waitMin };
+      }) : [];
+
       return {
         // from.departure / to.arrival = heure réelle en gare (scheduled stop time)
         // first.startTime peut inclure un décalage de marche → on préfère from.departure
@@ -1402,11 +1488,12 @@
         // Durée = uniquement le temps en transport (sans marche initiale/finale)
         duree:     fmtDur(ptLegs.reduce(function(acc, l) {
                      return acc + (l.duration || 0);
-                   }, 0) + (it.transfers || 0) * 180), // +3 min par correspondance estimée
+                   }, 0) + numTransfers * 180), // +3 min par correspondance estimée
         numero:    label,
-        transfers: it.transfers || Math.max(0, ptLegs.length - 1),
+        transfers: numTransfers,
         fiabilite: modeToReliab(first.mode || ''),
-        realTime:  ptLegs.some(function(l) { return l.realTime; })
+        realTime:  ptLegs.some(function(l) { return l.realTime; }),
+        legs:      legDetails
       };
     });
 
@@ -1482,7 +1569,7 @@
   /* Convertit un mode MOTIS en libellé court */
   function modeToLabel(mode) {
     var m = (mode || '').toUpperCase();
-    if (m === 'RAIL' || m === 'HIGHSPEED_RAIL' || m === 'REGIONAL_RAIL') return t('modeTrain');
+    if (m === 'RAIL' || m === 'HIGHSPEED_RAIL' || m === 'REGIONAL_RAIL' || m === 'TRANSIT' || m === 'INTERCITY_RAIL' || m === 'LONG_DISTANCE') return t('modeTrain');
     if (m === 'BUS' || m === 'COACH')           return t('modeBus');
     if (m === 'SUBWAY')                         return t('modeSubway');
     if (m === 'TRAM')                           return t('modeTram');
@@ -1938,7 +2025,24 @@
     } else if (trains.trains && trains.trains.length) {
       tH=(off>0?'<div class="info-note" style="margin-bottom:8px">'+t('trainsFuture')(dateLabel(selectedDate),pad(selectedTrainHour))+'</div>':'')+
         trains.trains.map(function(tr,i){
-          return '<div class="tc">'+
+          var legsHtml = '';
+          if (tr.transfers > 0 && tr.legs && tr.legs.length) {
+            legsHtml = '<div class="tlegs">'+
+              tr.legs.map(function(leg, idx) {
+                var waitHtml = (idx > 0 && leg.waitMin > 0)
+                  ? '<div class="tleg-wait">⇄ '+t('trainsChange')+' · '+t('trainsWait')(leg.waitMin)+'</div>'
+                  : (idx > 0 ? '<div class="tleg-wait">⇄ '+t('trainsChange')+'</div>' : '');
+                return waitHtml+
+                  '<div class="tleg-row">'+
+                  '<div class="tleg-times"><span class="tleg-t">'+leg.depart+'</span><span class="tleg-arr">'+leg.arrivee+'</span></div>'+
+                  '<div class="tleg-info">'+
+                  '<div class="tleg-label">'+leg.label+'</div>'+
+                  (leg.from ? '<div class="tleg-stop">'+leg.from+(leg.to ? ' → '+leg.to : '')+'</div>' : '')+
+                  '</div></div>';
+              }).join('')+
+            '</div>';
+          }
+          return '<div class="tc'+(tr.transfers>0?' tc-expand':'')+'">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
             '<div><div class="ttime">'+tr.depart+'</div>'+
             '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">'+t('trainsDep')+'</div></div>'+
@@ -1957,7 +2061,7 @@
                 '<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>'
               : '</div>'  /* no fake reliability bar without realtime data */
             )+
-            '</div></div>';
+            '</div></div>'+legsHtml+'</div>';
         }).join('');
     } else {
       tH='<div style="padding:8px;font-size:.75rem;color:var(--t3)">Aucun résultat.</div>';
@@ -2104,8 +2208,7 @@
 
     // ── Cache check ──────────────────────────────────────
     var cKey = ANALYSIS_CACHE.key(orig, dest, dayOffset(), selectedTrainHour);
-    var cached = ANALYSIS_CACHE.get(cKey);
-    if (cached) {
+    var cached = ANALYSIS_CACHE.get(cKey);    if (cached) {
       DATA = cached;
       invalidateTabCache();
       $('d-orig').textContent = DATA.oName;
@@ -2226,7 +2329,12 @@
       DATA = { m: ctx.m, aq: ctx.aq, rt: ctx.rt, trains: ctx.trains || null,
                reco: reco, modes: modes, scoreRes: scoreRes,
                oName: ctx.oGeo.name, dName: ctx.dGeo.name };
-      ANALYSIS_CACHE.set(cKey, DATA);
+      // Re-key on geocoded canonical names so that raw-input key and canonical key
+      // both point to the same entry. Mismatches happen when the user types a partial
+      // name that autocomplete resolves to a different canonical string.
+      var canonKey = ANALYSIS_CACHE.key(ctx.oGeo.name, ctx.dGeo.name, dayOffset(), selectedTrainHour);
+      ANALYSIS_CACHE.set(canonKey, DATA);
+      if (canonKey !== cKey) ANALYSIS_CACHE.set(cKey, DATA);
 
       $('d-orig').textContent = ctx.oGeo.name;
       $('d-dest').textContent = ctx.dGeo.name;

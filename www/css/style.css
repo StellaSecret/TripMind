@@ -228,11 +228,22 @@ a{color:var(--blue)}
 
 /* ── Train cards ────────────────────────────────────── */
 .tc{background:var(--bg2);border-radius:9px;padding:10px;margin-bottom:6px;border-left:3px solid var(--blue);display:flex;align-items:center;gap:8px}
+.tc-expand{flex-wrap:wrap;border-left-color:var(--amber)}
 .ttime{font-size:.92rem;font-weight:800;font-family:var(--fm)}
 .tmeta{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
 .tnum{font-size:.62rem;font-family:var(--fm);color:var(--t3)}
 .rb{width:32px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden}
 .rf{height:100%;background:var(--em)}
+.tlegs{width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:0}
+.tleg-row{display:flex;align-items:flex-start;gap:8px;padding:5px 0 5px 8px;border-left:2px solid var(--blue);margin-left:4px;position:relative}
+.tleg-row::before{content:'';position:absolute;left:-5px;top:10px;width:8px;height:8px;border-radius:50%;background:var(--blue);border:2px solid var(--bg2)}
+.tleg-times{display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:36px;flex-shrink:0}
+.tleg-t{font-size:.72rem;font-weight:700;font-family:var(--fm);color:var(--t1)}
+.tleg-arr{font-size:.68rem;font-family:var(--fm);color:var(--t3)}
+.tleg-info{display:flex;flex-direction:column;gap:2px}
+.tleg-label{font-size:.68rem;font-weight:600;font-family:var(--fm);color:var(--cyan)}
+.tleg-stop{font-size:.6rem;color:var(--t3);font-family:var(--fm)}
+.tleg-wait{font-size:.6rem;color:var(--amber);font-family:var(--fm);padding:4px 0 4px 12px;font-weight:600}
 
 /* ── Modes grid ─────────────────────────────────────── */
 .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
