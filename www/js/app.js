@@ -1489,9 +1489,14 @@
         depart:    isoToHHMM((first.from && first.from.departure) || first.startTime || it.startTime),
         arrivee:   isoToHHMM((last.to   && last.to.arrival)      || last.endTime    || it.endTime),
         // Durée = uniquement le temps en transport (sans marche initiale/finale)
-        duree:     fmtDur(allPtLegs.reduce(function(acc, l) {
-                     return acc + (l.duration || 0);
-                   }, 0)), // total PT duration incl. metro/tram
+        duree:     (function() {
+                     // Wall-clock duration: first PT departure → last PT arrival.
+                     // Summing leg.duration misses walk/wait time between legs.
+                     var depStr = (first.from && first.from.departure) || first.startTime || it.startTime;
+                     var arrStr = (last.to   && last.to.arrival)      || last.endTime    || it.endTime;
+                     var secs   = depStr && arrStr ? (new Date(arrStr) - new Date(depStr)) / 1000 : 0;
+                     return secs > 0 ? fmtDur(secs) : fmtDur(allPtLegs.reduce(function(acc, l) { return acc + (l.duration || 0); }, 0));
+                   })(),
         numero:    label,
         transfers: numTransfers,
         fiabilite: modeToReliab(first.mode || ''),
