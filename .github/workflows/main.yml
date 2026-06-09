@@ -91,8 +91,12 @@ jobs:
   # ── TESTS NON-RÉGRESSION (Playwright) ──────────────────
   # Runs in parallel with unit tests — both must pass before deploy
   playwright-tests:
-    name: Non-Regression Tests
-    needs: [scan-secrets, codeql-analysis, npm-security]
+    name: Non-Regression Tests (Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2]
+        shardTotal: [2]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -117,7 +121,7 @@ jobs:
 
       - name: Run offline tests (Chromium)
         working-directory: e2e
-        run: npx --no playwright test --grep-invert "@live" --project=chromium
+        run: npx --no playwright test --grep-invert "@live" --project=chromium --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         env:
           BASE_URL: http://localhost:3000
           CI: true
@@ -126,7 +130,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report-${{ github.run_number }}
+          name: playwright-report-${{ github.run_number }}-${{ matrix.shardIndex }}
           path: e2e/playwright-report/
           retention-days: 14
 
@@ -134,7 +138,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: test-results-${{ github.run_number }}
+          name: test-results-${{ github.run_number }}-${{ matrix.shardIndex }}
           path: e2e/test-results/
           retention-days: 7
 
