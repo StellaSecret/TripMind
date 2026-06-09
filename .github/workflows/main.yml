@@ -98,26 +98,34 @@ jobs:
         shardIndex: [1, 2]
         shardTotal: [2]
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      - name: Install Playwright (isolated in e2e/)
+      - name: Install dependencies
         working-directory: e2e
         run: |
           npm ci
-          npx playwright install --with-deps chromium
 
       - name: Serve app on port 3000
         run: |
-          npm ci
-          npx serve www --listen 3000 &
+          npx serve www --listen 3000 > serve.log 2>&1 &
           echo "Waiting for app to be ready..."
-          timeout 30 bash -c 'until curl -sf http://localhost:3000 > /dev/null; do sleep 1; done'
+          if ! timeout 30 bash -c 'until curl -sf http://localhost:3000 > /dev/null; do sleep 1; done'; then
+            echo "App failed to start. Logs:"
+            cat serve.log
+            exit 1
+          fi
           echo "App is ready on port 3000"
+
+      - name: Upload serve logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: serve-logs-${{ github.run_number }}-${{ matrix.shardIndex }}
+          path: e2e/serve.log
+          retention-days: 7
 
       - name: Run offline tests (Chromium)
         working-directory: e2e
@@ -165,9 +173,20 @@ jobs:
 
       - name: Serve app on port 3000
         run: |
-          npm ci
-          npx serve www --listen 3000 &
-          timeout 30 bash -c 'until curl -sf http://localhost:3000 > /dev/null; do sleep 1; done'
+          npx serve www --listen 3000 > serve.log 2>&1 &
+          if ! timeout 30 bash -c 'until curl -sf http://localhost:3000 > /dev/null; do sleep 1; done'; then
+            echo "App failed to start. Logs:"
+            cat serve.log
+            exit 1
+          fi
+
+      - name: Upload serve logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: serve-logs-live-${{ github.run_number }}
+          path: e2e/serve.log
+          retention-days: 7
 
       - name: Run @live tests (Chromium)
         working-directory: e2e
