@@ -82,7 +82,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-coverage-${{ github.run_number }}
           path: unit/coverage/
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_number }}
           path: e2e/playwright-report/
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ github.run_number }}
           path: e2e/test-results/
@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload live test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-live-report-${{ github.run_number }}
           path: e2e/playwright-report/
@@ -249,7 +249,7 @@ jobs:
           cp android/app/build/outputs/mapping/release/mapping.txt dist/mapping-${{ github.run_number }}.txt
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: artifacts-${{ github.run_number }}
           path: dist/
