@@ -2167,7 +2167,8 @@
   function buildShareURL() {
     var orig = ($('orig-inp') || {}).value || '';
     var dest = ($('dest-inp') || {}).value || '';
-    if (!orig || !dest) return window.location.href.split('#')[0];
+    var baseUrl = 'https://stella-secret.github.io/TripMind/';
+    if (!orig || !dest) return baseUrl;
     var params = new URLSearchParams({
       from: orig,
       to:   dest,
@@ -2175,7 +2176,7 @@
       h:    selectedTrainHour,
       lang: LANG,
     });
-    return window.location.href.split('#')[0] + '#' + params.toString();
+    return baseUrl + '#' + params.toString();
   }
 
   function restoreFromURL() {
