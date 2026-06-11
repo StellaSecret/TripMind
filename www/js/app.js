@@ -2385,10 +2385,14 @@
 
     setStep('s0', 'loading');
     stepGeocode()
-      .then(function(ctx) { return stepMeteo(ctx); })
-      .then(function(ctx) { return stepAirQuality(ctx); })
-      .then(function(ctx) { return stepRoute(ctx); })
-      .then(function(ctx) { return stepTrains(ctx); })
+      .then(function(ctx) {
+        return Promise.all([
+          stepMeteo(ctx),
+          stepAirQuality(ctx),
+          stepRoute(ctx),
+          stepTrains(ctx)
+        ]).then(function() { return ctx; });
+      })
       .then(function(ctx) { return new Promise(function(r) { setTimeout(function() { r(ctx); }, 300); }); })
       .then(function(ctx) { return stepRender(ctx); })
       .catch(function(e){
