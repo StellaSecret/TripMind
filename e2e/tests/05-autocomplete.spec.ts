@@ -92,7 +92,8 @@ stationTest.describe('Autocomplete — station direct search', () => {
   stationTest('typing a station name shows stop suggestions in dropdown', async ({ page }) => {
     await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
       r.fulfill({ json: MOCK_STOPS }));
-    await page.goto('/');
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');
     await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
     await stationExpect(page.locator(`${SEL.origAc} .ac-item-stop`)).not.toHaveCount(0);
@@ -101,7 +102,8 @@ stationTest.describe('Autocomplete — station direct search', () => {
   stationTest('stop items appear below a "Gares" separator', async ({ page }) => {
     await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
       r.fulfill({ json: MOCK_STOPS }));
-    await page.goto('/');
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');
     await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
     const sep = page.locator(`${SEL.origAc} .ac-separator`);
@@ -114,7 +116,8 @@ stationTest.describe('Autocomplete — station direct search', () => {
     // Also mock BAN so no real network needed
     await page.route(/api-adresse\.data\.gouv\.fr/, r =>
       r.fulfill({ json: { features: [] } }));
-    await page.goto('/');
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');
     await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
     await page.locator(`${SEL.origAc} .ac-item-stop`).first().click();
@@ -130,7 +133,8 @@ stationTest.describe('Autocomplete — station direct search', () => {
       r.fulfill({ json: MOCK_STOPS }));
     await page.route(/api-adresse\.data\.gouv\.fr/, r =>
       r.fulfill({ json: { features: [] } }));
-    await page.goto('/');
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+    await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');
     await stationExpect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 4_000 });
     await page.locator(`${SEL.origAc} .ac-item-stop`).first().click();

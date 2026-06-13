@@ -35,7 +35,8 @@
       destLabel: 'Ville de destination', destPlaceholder: 'Ex: Marseille, Nantes, Nice…',
       swapAriaLabel: 'Inverser origine et destination',
       analyzeBtn: 'Analyser le trajet →',
-      aboutSources: 'ℹ À propos des sources de données',
+      aboutSources: 'ℹ À propos des sources',
+      home: '🏠 Accueil',
       themeLight: 'Passer en mode clair', themeDark: 'Passer en mode sombre',
       /* Settings */
       settingsBack: '← Retour', settingsTitle: 'Sources de données',
@@ -190,7 +191,8 @@
       destLabel: 'Destination city', destPlaceholder: 'E.g. Marseille, Nantes, Nice…',
       swapAriaLabel: 'Swap origin and destination',
       analyzeBtn: 'Analyze trip →',
-      aboutSources: 'ℹ About data sources',
+      aboutSources: 'ℹ About sources',
+      home: '🏠 Home',
       themeLight: 'Switch to light mode', themeDark: 'Switch to dark mode',
       /* Settings */
       settingsBack: '← Back', settingsTitle: 'Data sources',
@@ -2247,7 +2249,7 @@
   function buildShareURL() {
     var orig = ($('orig-inp') || {}).value || '';
     var dest = ($('dest-inp') || {}).value || '';
-    var baseUrl = 'https://stella-secret.github.io/TripMind/';
+    var baseUrl = 'https://stella-secret.github.io/TripMind/app.html';
     if (!orig || !dest) return baseUrl;
     var params = new URLSearchParams({
       from: orig,
@@ -2513,6 +2515,7 @@
     el = document.getElementById('dest-inp'); if(el) el.placeholder = t('destPlaceholder');
     el = document.getElementById('swap-btn'); if(el) el.setAttribute('aria-label', t('swapAriaLabel'));
     el = document.getElementById('analyze-btn'); if(el) el.textContent = t('analyzeBtn');
+    el = document.getElementById('go-home'); if(el) el.textContent = t('home');
     el = document.getElementById('go-settings'); if(el) el.textContent = t('aboutSources');
     el = document.getElementById('settings-back'); if(el) el.textContent = t('settingsBack');
     el = document.getElementById('settings-title'); if(el) el.textContent = t('settingsTitle');

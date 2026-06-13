@@ -40,7 +40,8 @@ export const SEL = {
 // ── Navigation helpers ────────────────────────────────────────────────────────
 
 export async function gotoSearch(page: Page) {
-  await page.goto('/');
+  const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+  await page.goto(baseUrl + '/app.html');
   await expect(page.locator(SEL.scrSearch)).toHaveClass(/\bon\b/);
 }
 

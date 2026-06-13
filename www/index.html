@@ -1,239 +1,478 @@
 <!DOCTYPE html>
-<html lang="fr" id="html-root">
+<html lang="fr">
 <head>
-  <meta charset="UTF-8"/>
-  <!-- viewport-fit=cover est REQUIS pour que env(safe-area-inset-*) fonctionne -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-  <meta name="theme-color" content="#0E1726"/>
-  <!-- Android : status bar transparente pour que le contenu passe dessous -->
-  <meta name="mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <title>TripMind</title>
-  <link rel="stylesheet" href="css/style.css"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TripMind — Votre assistant de déplacement intelligent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Lexend:wght@300;400;500;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+/* ── DESIGN SYSTEM (Consistent with StellaSecret) ── */
+:root {
+  --bg: #080C14;
+  --surface: #0D1525;
+  --surface2: #121E35;
+  --border: rgba(255,255,255,0.07);
+  --text: #E8EDF5;
+  --text-muted: #6B7A9A;
+  --primary: #4E4AF2;
+  --cyan: #00D4AA;
+  --font-display: 'Outfit', sans-serif;
+  --font-main: 'Lexend', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 12px;
+  --radius-lg: 20px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-main); font-size: 15px; line-height: 1.6; overflow-x: hidden; }
+
+.noise {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.4;
+}
+
+/* ── NAV ── */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 3rem; backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 1rem; position: sticky; top: 0; z-index: 50; background: rgba(8,12,20,0.8); }
+.nav-logo { font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; color: var(--text); text-decoration: none; }
+.nav-logo span { color: var(--cyan); }
+.nav-right { display: flex; align-items: center; gap: 1rem; }
+.btn-nav { background: var(--cyan); color: #080C14; padding: 0.6rem 1.2rem; border-radius: var(--radius); text-decoration: none; font-size: 0.85rem; font-weight: 700; transition: transform 0.2s ease; }
+.btn-nav:hover { transform: translateY(-1px); }
+.lang-btn { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 0.6rem 0.8rem; border-radius: var(--radius); cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem; }
+
+/* ── HERO ── */
+.hero { padding: 6rem 3rem 2rem; text-align: center; position: relative; }
+.hero-title { font-family: var(--font-display); font-size: clamp(2.5rem, 5vw, 4.5rem); font-weight: 800; margin-bottom: 1.5rem; line-height: 1.1; letter-spacing: -0.02em; }
+.hero-title em { color: var(--cyan); font-style: normal; }
+.hero-sub { color: var(--text-muted); font-size: 1.2rem; max-width: 700px; margin: 0 auto 2.5rem; }
+.btn-primary { background: var(--cyan); color: #080C14; padding: 1.1rem 2.5rem; border-radius: var(--radius); text-decoration: none; font-weight: 700; font-family: var(--font-display); transition: transform 0.2s ease, box-shadow 0.2s ease; display: inline-block; font-size: 1.1rem; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,212,170,0.2); }
+
+/* ── INTERACTIVE MOCKUP ── */
+.mockup-container { padding: 0 1.5rem 6rem; perspective: 2000px; }
+.mockup {
+    max-width: 860px; margin: 0 auto; background: #0F172A; border: 1px solid rgba(255,255,255,0.12); border-radius: 28px; padding: 0;
+    box-shadow: 0 50px 100px -20px rgba(0,0,0,0.7); transform: rotateX(5deg); transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden; user-select: none; text-align: left;
+}
+.mockup:hover { transform: rotateX(0deg) translateY(-5px); }
+
+.m-top-bar { background: #1E293B; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.m-route { font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: #fff; }
+.m-route em { color: var(--cyan); font-style: normal; margin: 0 8px; font-weight: 400; opacity: 0.8; }
+
+.m-content { padding: 24px; min-height: 400px; }
+.m-score-row { display: flex; gap: 24px; align-items: center; margin-bottom: 30px; }
+.m-gauge { width: 90px; height: 90px; border-radius: 50%; background: conic-gradient(var(--cyan) 306deg, #1E293B 0); display: flex; align-items: center; justify-content: center; position: relative; }
+.m-gauge::after { content: ''; position: absolute; inset: 8px; background: #0F172A; border-radius: 50%; }
+.m-gauge-val { position: relative; z-index: 1; font-family: var(--font-display); font-size: 1.8rem; font-weight: 800; color: var(--cyan); }
+
+.m-status-box { flex: 1; }
+.m-status-label { font-size: 1.2rem; font-weight: 800; margin-bottom: 4px; color: #fff; font-family: var(--font-display); letter-spacing: -0.02em; }
+.m-status-sub { font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono); }
+
+.m-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 24px; padding-bottom: 0; }
+.m-tab { padding: 12px 20px; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s ease; font-family: var(--font-display); }
+.m-tab:hover { color: #fff; background: rgba(255,255,255,0.03); }
+.m-tab.active { color: var(--cyan); border-bottom-color: var(--cyan); background: rgba(0,212,170,0.08); }
+
+.m-pane { display: none; animation: mFade 0.3s ease; }
+.m-pane.active { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@keyframes mFade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+.m-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; }
+.m-card-head { display: flex; justify-content: space-between; margin-bottom: 12px; align-items: flex-start; }
+.m-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--font-mono); }
+.m-icon { font-size: 1.4rem; }
+.m-val { font-size: 1.6rem; font-weight: 800; color: #fff; font-family: var(--font-display); }
+.m-subval { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+/* Route Specific */
+.m-path { border-left: 2px dashed rgba(255,255,255,0.1); margin-left: 10px; padding-left: 20px; position: relative; }
+.m-path-item { margin-bottom: 15px; font-size: 0.9rem; position: relative; }
+.m-path-item::before { content: ''; position: absolute; left: -26px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); }
+.m-path-item.end::before { background: #F43F5E; }
+
+/* ── FEATURES ── */
+.features { padding: 4rem 3rem; max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2.5rem; transition: border-color 0.2s ease; }
+.card:hover { border-color: rgba(0,212,170,0.3); }
+.card h3 { font-family: var(--font-display); margin-bottom: 0.8rem; color: var(--cyan); font-size: 1.3rem; }
+.card p { color: var(--text-muted); font-size: 0.95rem; }
+
+/* ── FINAL CTA ── */
+.cta-section { padding: 8rem 3rem; text-align: center; background: radial-gradient(circle at center, rgba(78,74,242,0.05) 0%, transparent 70%); }
+.cta-title { font-family: var(--font-display); font-size: 2.5rem; font-weight: 800; margin-bottom: 2rem; }
+
+/* ── FOOTER ── */
+footer { padding: 4rem 3rem; border-top: 1px solid var(--border); text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+.footer-links { display: flex; justify-content: center; gap: 2rem; margin-top: 1.5rem; }
+.footer-links a { color: var(--text-muted); text-decoration: none; transition: color 0.2s ease; }
+.footer-links a:hover { color: var(--cyan); }
+
+/* ── REDIRECT LOGIC ── */
+#loading-overlay {
+    position: fixed; inset: 0; background: var(--bg); z-index: 1000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: var(--font-display);
+}
+.spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--cyan); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+    .nav { padding: 1rem 1.5rem; }
+    .hero { padding: 4rem 1.5rem; }
+    .m-pane.active { grid-template-columns: 1fr; }
+    .m-top-bar { padding: 10px 15px; }
+    .m-status-label { font-size: 1rem; }
+}
+
+  </style>
+  <script>
+    // 1. Détection redirection immédiate
+    (function() {
+      var isMobile = window.location.origin.includes('localhost') && !window.location.port;
+      var hasHash = window.location.hash && window.location.hash.length > 1;
+      if (isMobile || hasHash) {
+        window.location.href = 'app.html' + window.location.hash;
+      }
+    })();
+
+    // 2. Gestion de la langue
+    var LANG = (function() {
+      try {
+        var s = localStorage.getItem('tripmind-lang');
+        if (s) return s;
+      } catch(e) {}
+      var nav = navigator.language || '';
+      return (nav.toLowerCase().indexOf('fr') >= 0) ? 'fr' : 'en';
+    })();
+
+    var TRANSLATIONS = {
+      fr: {
+        title: "TripMind — Votre assistant de déplacement intelligent",
+        navLaunch: "Lancer l'App",
+        heroTitle: "Planifiez vos trajets <em>intelligemment</em>",
+        heroSub: "Météo, qualité de l'air, pollen et trains en temps réel. Toutes les données dont vous avez besoin pour vos voyages en France, sans aucun token.",
+        heroBtn: "🚀 Commencer l'analyse",
+
+        // Mockup specific
+        mFrom: "Paris", mTo: "Lyon", mDate: "Aujourd'hui",
+        mScoreBon: "Bonnes conditions",
+        mScoreSub: "Basé sur météo, air et pollen",
+        mTab1: "🗺 Aperçu", mTab2: "🚗 Trajet", mTab3: "💨 Air", mTab4: "🚆 Trains",
+        mCard1: "Température", mCard2: "Qualité air",
+        mCard3: "Durée route", mCard4: "Distance",
+        mCard5: "Pollen", mCard6: "Ozone (O₃)",
+        mCard7: "Prochain train", mCard8: "État trafic",
+        mTrainVal: "10:14 → 12:17", mTrainSub: "TGV INOUI 6611 · Direct",
+        mPollenVal: "Modéré", mPollenSub: "Graminées actifs",
+        mRouteVal: "4h 15m", mRouteSub: "via A6 (462 km)",
+        mAirVal: "25 AQI", mAirSub: "Indice Européen",
+        mTempVal: "22°C", mTempSub: "Ciel dégagé",
+
+        feat1Title: "🌤 Météo & Air",
+        feat1Sub: "Visualisez les conditions météo et la qualité de l'air (AQI, PM2.5, NO₂) sur tout votre itinéraire.",
+        feat2Title: "🚆 Trains SNCF",
+        feat2Sub: "Accédez aux horaires et retards en temps réel via le moteur MOTIS 2 et les données ouvertes.",
+        feat3Title: "🌿 Santé & Pollen",
+        feat3Sub: "Restez informé sur les pics de pollen (5 espèces suivies) pour mieux gérer vos allergies.",
+        feat4Title: "🔒 Privacy First",
+        feat4Sub: "Aucun compte requis, aucune donnée collectée, aucun tracking. Juste vous et vos trajets.",
+        ctaTitle: "Prêt à optimiser votre voyage ?",
+        ctaBtn: "Ouvrir l'application",
+        footerLegal: "© 2026 StellaSecret · TripMind est Open Source",
+        footerPrivacy: "Confidentialité",
+        redirecting: "Redirection vers l'application..."
+      },
+      en: {
+        title: "TripMind — Your smart travel assistant",
+        navLaunch: "Launch App",
+        heroTitle: "Plan your trips <em>intelligently</em>",
+        heroSub: "Real-time weather, air quality, pollen and trains. All the data you need for your travels in France, zero tokens required.",
+        heroBtn: "🚀 Start analysis",
+
+        // Mockup specific
+        mFrom: "Paris", mTo: "Lyon", mDate: "Today",
+        mScoreBon: "Good conditions",
+        mScoreSub: "Based on weather, air & pollen",
+        mTab1: "🗺 Overview", mTab2: "🚗 Route", mTab3: "💨 Air", mTab4: "🚆 Trains",
+        mCard1: "Temperature", mCard2: "Air Quality",
+        mCard3: "Drive time", mCard4: "Distance",
+        mCard5: "Pollen", mCard6: "Ozone (O₃)",
+        mCard7: "Next train", mCard8: "Traffic info",
+        mTrainVal: "10:14 AM → 12:17 PM", mTrainSub: "TGV INOUI 6611 · Direct",
+        mPollenVal: "Moderate", mPollenSub: "Grass pollen active",
+        mRouteVal: "4h 15m", mRouteSub: "via A6 highway (462 km)",
+        mAirVal: "25 AQI", mAirSub: "European Index",
+        mTempVal: "72°F", mTempSub: "Clear sky",
+
+        feat1Title: "🌤 Weather & Air",
+        feat1Sub: "View weather conditions and air quality (AQI, PM2.5, NO₂) across your entire route.",
+        feat2Title: "🚆 SNCF Trains",
+        feat2Sub: "Access real-time schedules and delays via the MOTIS 2 engine and open data.",
+        feat3Title: "🌿 Health & Pollen",
+        feat3Sub: "Stay informed about pollen peaks (5 species tracked) to better manage your allergies.",
+        feat4Title: "🔒 Privacy First",
+        feat4Sub: "No account required, no data collected, no tracking. Just you and your journeys.",
+        ctaTitle: "Ready to optimize your trip?",
+        ctaBtn: "Open the application",
+        footerLegal: "© 2026 StellaSecret · TripMind is Open Source",
+        footerPrivacy: "Privacy Policy",
+        redirecting: "Redirecting to the app..."
+      }
+    };
+
+    function t(key) {
+      return (TRANSLATIONS[LANG] || TRANSLATIONS.fr)[key] || '';
+    }
+
+    function applyLang() {
+      document.title = t('title');
+      document.getElementById('nav-launch').textContent = t('navLaunch');
+      document.getElementById('hero-title').innerHTML = t('heroTitle');
+      document.getElementById('hero-sub').textContent = t('heroSub');
+      document.getElementById('hero-btn').textContent = t('heroBtn');
+
+      // Mockup Static
+      document.getElementById('m-from').textContent = t('mFrom');
+      document.getElementById('m-to').textContent = t('mTo');
+      document.getElementById('m-date').textContent = t('mDate');
+      document.getElementById('m-score-bon').textContent = t('mScoreBon');
+      document.getElementById('m-score-sub').textContent = t('mScoreSub');
+      document.getElementById('m-tab1').textContent = t('mTab1');
+      document.getElementById('m-tab2').textContent = t('mTab2');
+      document.getElementById('m-tab3').textContent = t('mTab3');
+      document.getElementById('m-tab4').textContent = t('mTab4');
+
+      // Mockup Dynamic Labels
+      document.getElementById('m-lbl-temp').textContent = t('mCard1');
+      document.getElementById('m-lbl-air').textContent = t('mCard2');
+      document.getElementById('m-lbl-drive').textContent = t('mCard3');
+      document.getElementById('m-lbl-dist').textContent = t('mCard4');
+      document.getElementById('m-lbl-pollen').textContent = t('mCard5');
+      document.getElementById('m-lbl-ozone').textContent = t('mCard6');
+      document.getElementById('m-lbl-train').textContent = t('mCard7');
+      document.getElementById('m-lbl-traffic').textContent = t('mCard8');
+
+      // Mockup Dynamic Values
+      document.getElementById('m-val-temp').textContent = t('mTempVal');
+      document.getElementById('m-sub-temp').textContent = t('mTempSub');
+      document.getElementById('m-val-air').textContent = t('mAirVal');
+      document.getElementById('m-sub-air').textContent = t('mAirSub');
+      document.getElementById('m-val-drive').textContent = t('mRouteVal');
+      document.getElementById('m-sub-drive').textContent = t('mRouteSub');
+      document.getElementById('m-val-pollen').textContent = t('mPollenVal');
+      document.getElementById('m-sub-pollen').textContent = t('mPollenSub');
+      document.getElementById('m-val-train').textContent = t('mTrainVal');
+      document.getElementById('m-sub-train').textContent = t('mTrainSub');
+
+      document.getElementById('feat1-title').textContent = t('feat1Title');
+      document.getElementById('feat1-sub').textContent = t('feat1Sub');
+      document.getElementById('feat2-title').textContent = t('feat2Title');
+      document.getElementById('feat2-sub').textContent = t('feat2Sub');
+      document.getElementById('feat3-title').textContent = t('feat3Title');
+      document.getElementById('feat3-sub').textContent = t('feat3Sub');
+      document.getElementById('feat4-title').textContent = t('feat4Title');
+      document.getElementById('feat4-sub').textContent = t('feat4Sub');
+      document.getElementById('cta-title').textContent = t('ctaTitle');
+      document.getElementById('cta-btn').textContent = t('ctaBtn');
+      document.getElementById('footer-legal').textContent = t('footerLegal');
+      document.getElementById('footer-privacy').textContent = t('footerPrivacy');
+      document.getElementById('redirect-msg').textContent = t('redirecting');
+      document.getElementById('lang-toggle').textContent = LANG === 'fr' ? 'EN' : 'FR';
+      document.documentElement.lang = LANG;
+    }
+
+    function toggleLang() {
+      LANG = (LANG === 'fr') ? 'en' : 'fr';
+      try { localStorage.setItem('tripmind-lang', LANG); } catch(e) {}
+      applyLang();
+    }
+
+    // 3. Mockup Tab Switcher
+    function showMockupTab(tabId) {
+        document.querySelectorAll('.m-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.m-pane').forEach(p => p.classList.remove('active'));
+
+        document.querySelector(`.m-tab[data-id="${tabId}"]`).classList.add('active');
+        document.getElementById(`pane-${tabId}`).classList.add('active');
+    }
+  </script>
 </head>
 <body>
-<div class="app" id="app">
 
-  <!-- ════════════════════════════════════
-       ÉCRAN 1 : RECHERCHE
-  ═══════════════════════════════════════ -->
-  <div class="scr on" id="scr-search">
-    <div class="ss">
-      <div class="grid-bg"></div>
-      <div class="logo-row">
-        <div class="logo-ic">🧭</div>
-        <div>
-          <div class="logo-nm">TripMind</div>
-          <div class="logo-sub" id="logo-sub">France · APIs publiques</div>
-        </div>
-      </div>
+<div id="loading-overlay" style="display: none;">
+    <div class="spinner"></div>
+    <p id="redirect-msg">Redirection vers l'application...</p>
+</div>
 
-      <div class="sc">
-        <div class="sc-ttl" id="pills-title">🛰 Données temps réel — aucun token requis</div>
-        <div class="apis-strip">
-          <span class="api-pill" id="pill0">✓ Open-Meteo météo</span>
-          <span class="api-pill" id="pill1">✓ Open-Meteo AQI</span>
-          <span class="api-pill" id="pill2">✓ Open-Meteo pollen</span>
-          <span class="api-pill" id="pill3">✓ BAN géocodage</span>
-          <span class="api-pill" id="pill4">✓ OSRM trafic</span>
-          <span class="api-pill" style="background:rgba(6,182,212,.1);border-color:rgba(6,182,212,.25);color:#06B6D4" id="pill5">✓ Transitous trains</span>
-        </div>
+<div class="noise"></div>
 
-        <!-- Sélecteur de date -->
-        <div class="date-section">
-          <label class="il" id="date-section-label">Date de départ</label>
-          <div class="date-scroll-wrap">
-            <div class="date-chips" id="date-picker"></div>
-          </div>
-          <div class="selected-date-display" id="selected-date-label">Aujourd'hui</div>
-        </div>
-
-        <!-- Sélecteur d'heure de départ (trains) -->
-        <div class="time-section" id="time-section" style="display:none">
-          <label class="il" id="time-section-label">🕐 Heure de départ (trains)</label>
-          <div class="time-chips" id="time-picker"></div>
-        </div>
-
-        <!-- Champ ORIGINE -->
-        <div class="ig">
-          <label class="il" for="orig-inp" id="orig-label">Ville de départ</label>
-          <span class="ii">📍</span>
-          <input class="inf" id="orig-inp" type="text"
-                 placeholder="Ex: Paris, Lyon, Bordeaux…" id="orig-inp"
-                 autocomplete="off" spellcheck="false"
-                 aria-autocomplete="list" aria-controls="orig-ac" aria-expanded="false"/>
-          <ul class="ac-list" id="orig-ac" role="listbox" aria-label="Suggestions de villes"></ul>
-        </div>
-
-        <div class="sw-btn" id="swap-btn" role="button" aria-label="Inverser origine et destination">⇅</div>
-
-        <!-- Champ DESTINATION -->
-        <div class="ig" style="margin-top:5px">
-          <label class="il" for="dest-inp" id="dest-label">Ville de destination</label>
-          <span class="ii">🏁</span>
-          <input class="inf" id="dest-inp" type="text"
-                 placeholder="Ex: Marseille, Nantes, Nice…" id="dest-inp"
-                 autocomplete="off" spellcheck="false"
-                 aria-autocomplete="list" aria-controls="dest-ac" aria-expanded="false"/>
-          <ul class="ac-list" id="dest-ac" role="listbox" aria-label="Suggestions de villes"></ul>
-        </div>
-
-        <div class="err-box" id="ebox" role="alert"></div>
-        <button class="main-btn" id="analyze-btn">Analyser le trajet →</button>
-
-        <div style="text-align:center;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:12px">
-          <button id="go-settings"
-            style="background:none;border:none;color:var(--t3);font-size:.67rem;cursor:pointer;font-family:var(--fm)">
-            ℹ À propos des sources de données
-          </button>
-          <button id="lang-toggle"
-            style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:0 8px;height:32px;font-size:.65rem;cursor:pointer;font-family:var(--fm);color:var(--t2);flex-shrink:0"
-            aria-label="Switch language">EN</button>
-          <button id="theme-toggle"
-            style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;width:32px;height:32px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"
-            aria-label="Passer en mode clair">☀️</button>
-        </div>
-      </div>
-    </div>
+<nav class="nav">
+  <a class="nav-logo" href="#">🧭 Trip<span>Mind</span></a>
+  <div class="nav-right">
+    <button class="lang-btn" id="lang-toggle" onclick="toggleLang()">EN</button>
+    <a class="btn-nav" id="nav-launch" href="app.html">Lancer l'App</a>
   </div>
+</nav>
 
-  <!-- ════════════════════════════════════
-       ÉCRAN 2 : À PROPOS DES APIS
-  ═══════════════════════════════════════ -->
-  <div class="scr" id="scr-settings">
-    <div class="settings-scr">
-      <div class="settings-header">
-        <button class="back-icon-btn" id="settings-back">← Retour</button>
-        <div class="settings-title" id="settings-title">Sources de données</div>
-      </div>
+<section class="hero">
+  <h1 class="hero-title" id="hero-title">Planifiez vos trajets <em>intelligemment</em></h1>
+  <p class="hero-sub" id="hero-sub">Météo, qualité de l'air, pollen et trains en temps réel. Toutes les données dont vous avez besoin, sans aucun token.</p>
+  <a href="app.html" class="btn-primary" id="hero-btn">🚀 Commencer l'analyse</a>
+</section>
 
-      <!-- Transitous -->
-      <div class="transitous-card">
-        <div class="transitous-header">
-          <div class="transitous-logo">🚆</div>
-          <div>
-            <div class="transitous-name">Transitous — Trains &amp; transports</div>
-            <div class="transitous-sub" id="transitous-subtitle">Gratuit · Open source · Aucun token</div>
-          </div>
-        </div>
-        <div class="transitous-steps">
-          <div class="transitous-step">
-            <span class="step-num">✓</span>
-<span id="transitous-step1">Moteur <strong>MOTIS 2</strong> — couverture SNCF France via données GTFS ouvertes</span>
-          </div>
-          <div class="transitous-step">
-            <span class="step-num">✓</span>
-<span id="transitous-step2">Données temps réel (retards, annulations) sur certaines lignes</span>
-          </div>
-          <div class="transitous-step">
-            <span class="step-num">✓</span>
-<span id="transitous-step3">Service communautaire FOSS — pas de compte requis</span>
-          </div>
-        </div>
-        <a class="transitous-link" href="https://transitous.org" target="_blank" style="background:linear-gradient(135deg,#0284c7,#06B6D4)">
-          🔗 transitous.org →
-        </a>
-      </div>
-
-      <!-- Toutes les APIs -->
-      <div class="free-apis-card">
-        <div class="free-apis-title" id="free-apis-title">Toutes les sources — 100% sans token</div>
-        <div class="free-api-row" id="freeApi1"><div class="free-api-dot"></div><strong>Open-Meteo</strong> — météo complète + UV (16 jours)</div>
-        <div class="free-api-row" id="freeApi2"><div class="free-api-dot"></div><strong>Open-Meteo AQ</strong> — AQI, PM2.5, PM10, NO₂, ozone (Copernicus CAMS)</div>
-        <div class="free-api-row" id="freeApi3"><div class="free-api-dot"></div><strong>Open-Meteo pollen</strong> — 5 espèces (modèle SILAM)</div>
-        <div class="free-api-row" id="freeApi4"><div class="free-api-dot"></div><strong>Base Adresse Nationale</strong> — géocodage + autocomplétion (data.gouv.fr)</div>
-        <div class="free-api-row" id="freeApi5"><div class="free-api-dot"></div><strong>OSRM / OpenStreetMap</strong> — itinéraire routier théorique</div>
-        <div class="free-api-row" id="freeApi6"><div class="free-api-dot"></div><strong>Transitous / MOTIS 2</strong> — trains et transports publics</div>
-        <div style="font-size:.65rem;color:var(--t3);margin-top:10px;line-height:1.6">
-          <span id="privacy-notice">TripMind ne collecte aucune donnée personnelle.<br>
-          Aucun compte, aucun token, aucun tracking.</span>
-          <br>
-          <a href="https://stellasecret.github.io/privacy-pages/tripmind/privacy.html" id="privacy-link" target="_blank" style="color:var(--accent);text-decoration:none;font-weight:600;display:inline-block;margin-top:4px">Politique de confidentialité</a>
+<section class="mockup-container">
+    <div class="mockup">
+        <!-- Barre de titre simulant l'app -->
+        <div class="m-top-bar">
+            <div class="m-route"><span id="m-from">Paris</span> <em>→</em> <span id="m-to">Lyon</span></div>
+            <div style="font-size: 0.7rem; opacity: 0.6;" id="m-date">Aujourd'hui</div>
         </div>
 
-        <div class="cache-status-card">
-          <div class="cache-status-title" id="cache-status-title">⚡ Cache & Paramètres</div>
-          <div id="cache-status-panel">
-            <div style="font-size:.72rem;color:var(--t3)">Ouvrez ce panneau depuis la recherche pour voir le statut du cache.</div>
-          </div>
+        <div class="m-content">
+            <!-- Score Circulaire -->
+            <div class="m-score-row">
+                <div class="m-gauge">
+                    <div class="m-gauge-val">85</div>
+                </div>
+                <div class="m-status-box">
+                    <div class="m-status-label" id="m-score-bon">Bonnes conditions</div>
+                    <div class="m-status-sub" id="m-score-sub">Basé sur météo, air et pollen</div>
+                </div>
+            </div>
+
+            <!-- Onglets Interactifs -->
+            <div class="m-tabs">
+                <div class="m-tab active" data-id="overview" onclick="showMockupTab('overview')" id="m-tab1">🗺 Aperçu</div>
+                <div class="m-tab" data-id="route" onclick="showMockupTab('route')" id="m-tab2">🚗 Trajet</div>
+                <div class="m-tab" data-id="air" onclick="showMockupTab('air')" id="m-tab3">💨 Air</div>
+                <div class="m-tab" data-id="trains" onclick="showMockupTab('trains')" id="m-tab4">🚆 Trains</div>
+            </div>
+
+            <!-- Panes (Contenu des onglets) -->
+            <div class="m-pane active" id="pane-overview">
+                <div class="m-card">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-temp">Température</span>
+                        <span class="m-icon">☀️</span>
+                    </div>
+                    <div class="m-val" id="m-val-temp">22°C</div>
+                    <div class="m-subval" id="m-sub-temp">Ciel dégagé</div>
+                </div>
+                <div class="m-card">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-air">Qualité air</span>
+                        <span class="m-icon">🟢</span>
+                    </div>
+                    <div class="m-val" id="m-val-air">25 AQI</div>
+                    <div class="m-subval" id="m-sub-air">Indice Européen</div>
+                </div>
+            </div>
+
+            <div class="m-pane" id="pane-route">
+                <div class="m-card">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-drive">Durée route</span>
+                        <span class="m-icon">🏎️</span>
+                    </div>
+                    <div class="m-val" id="m-val-drive">4h 15m</div>
+                    <div class="m-subval" id="m-sub-drive">via A6 highway (462 km)</div>
+                </div>
+                <div class="m-card">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-dist">Distance</span>
+                        <span class="m-icon">📏</span>
+                    </div>
+                    <div class="m-val">462 km</div>
+                </div>
+            </div>
+
+            <div class="m-pane" id="pane-air">
+                <div class="m-card">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-pollen">Pollen</span>
+                        <span class="m-icon">🌿</span>
+                    </div>
+                    <div class="m-val" id="m-val-pollen">Modéré</div>
+                    <div class="m-subval" id="m-sub-pollen">Graminées actifs</div>
+                </div>
+                <div class="m-card">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-ozone">Ozone (O₃)</span>
+                        <span class="m-icon">🌫️</span>
+                    </div>
+                    <div class="m-val">65 µg/m³</div>
+                </div>
+            </div>
+
+            <div class="m-pane" id="pane-trains">
+                <div class="m-card" style="grid-column: span 2">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-train">Prochain train</span>
+                        <span class="m-icon">🚅</span>
+                    </div>
+                    <div class="m-val" id="m-val-train">10:14 → 12:17</div>
+                    <div class="m-subval" id="m-sub-train">TGV INOUI 6611 · Direct</div>
+                </div>
+                <div class="m-card" style="grid-column: span 2">
+                    <div class="m-card-head">
+                        <span class="m-label" id="m-lbl-traffic">État trafic</span>
+                        <span class="m-icon">🟢</span>
+                    </div>
+                    <div class="m-val">À l'heure</div>
+                </div>
+            </div>
+
         </div>
-        </div>
-      </div>
     </div>
+</section>
+
+<section class="features">
+  <div class="card">
+    <h3 id="feat1-title">🌤 Météo & Air</h3>
+    <p id="feat1-sub">Visualisez les conditions météo et la qualité de l'air (AQI, PM2.5, NO₂) sur tout votre itinéraire en France.</p>
   </div>
-
-  <!-- ════════════════════════════════════
-       ÉCRAN 3 : CHARGEMENT
-  ═══════════════════════════════════════ -->
-  <div class="scr" id="scr-loading">
-    <div class="ls">
-      <div class="orb"></div>
-      <div class="lmsg" id="lmsg">Initialisation…</div>
-      <div class="lsteps">
-        <div class="lstep" id="s0"><span class="lstep-txt">Géocodage BAN (data.gouv.fr)</span><div class="dot"></div>Géocodage BAN (data.gouv.fr)</div>
-        <div class="lstep" id="s1"><span class="lstep-txt">Météo + UV · Open-Meteo</span><div class="dot"></div>Météo + UV · Open-Meteo</div>
-        <div class="lstep" id="s2"><span class="lstep-txt">Qualité de l'air · Copernicus CAMS</span><div class="dot"></div>Qualité de l'air · Copernicus CAMS</div>
-        <div class="lstep" id="s3"><span class="lstep-txt">Pollen · Open-Meteo SILAM</span><div class="dot"></div>Pollen · Open-Meteo SILAM</div>
-        <div class="lstep" id="s4"><span class="lstep-txt">Itinéraire routier · OSRM</span><div class="dot"></div>Itinéraire routier · OSRM</div>
-      </div>
-    </div>
+  <div class="card">
+    <h3 id="feat2-title">🚆 Trains SNCF</h3>
+    <p id="feat2-sub">Accédez aux horaires et retards en temps réel via le moteur MOTIS 2 et les données ouvertes.</p>
   </div>
-
-  <!-- ════════════════════════════════════
-       ÉCRAN 4 : DASHBOARD
-  ═══════════════════════════════════════ -->
-  <div class="scr" id="scr-dash">
-    <div class="dh">
-      <div class="dr">
-        <span class="cpill" id="d-orig">—</span>
-        <span class="rarr">→</span>
-        <span class="cpill" id="d-dest">—</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <button id="copy-link-btn"
-          style="display:none;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0"
-          title="Copy share link" aria-label="Copy share link">🔗</button>
-        <button id="lang-toggle-dash"
-          style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:0 8px;height:30px;font-size:.65rem;cursor:pointer;font-family:var(--fm);color:var(--t2);flex-shrink:0"
-          aria-label="Switch language">EN</button>
-        <button id="theme-toggle-dash"
-          style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center"
-          aria-label="Basculer le thème">☀️</button>
-        <button class="settings-btn" id="settings-icon" aria-label="Paramètres">⚙️</button>
-        <button class="back-btn" id="back-btn">← Modifier</button>
-      </div>
-    </div>
-
-    <!-- Bandeau date sous le header -->
-    <div class="dash-date-bar">
-      <span class="dash-date-icon">📅</span>
-      <span id="dash-date-label">Aujourd'hui</span>
-    </div>
-
-    <div class="sbanner">
-      <div class="sci" id="score-circ"></div>
-      <div style="flex:1">
-        <div style="font-size:.92rem;font-weight:700;margin-bottom:2px" id="score-lbl">—</div>
-        <div style="font-size:.7rem;color:var(--t2)" id="score-subtitle">Calculé sur météo, air et pollen</div>
-        <div style="font-size:.65rem;color:var(--t3);font-family:var(--fm);margin-top:5px" id="score-detail">—</div>
-      </div>
-    </div>
-
-    <div class="stabs">
-      <div class="tab active" data-tab="overview" id="tab-overview">🗺 Aperçu</div>
-      <div class="tab" data-tab="route" id="tab-route">🚗 Trajet</div>
-      <div class="tab" data-tab="air" id="tab-air">💨 Air & Pollen</div>
-      <div class="tab" data-tab="sante" id="tab-sante">💊 Santé</div>
-      <div class="tab" data-tab="trains" id="tab-trains">🚆 Trains</div>
-    </div>
-
-    <div class="cards" id="tab-content"></div>
+  <div class="card">
+    <h3 id="feat3-title">🌿 Santé & Pollen</h3>
+    <p id="feat3-sub">Restez informé sur les pics de pollen (5 espèces suivies) pour mieux gérer vos déplacements.</p>
   </div>
+  <div class="card">
+    <h3 id="feat4-title">🔒 Privacy First</h3>
+    <p id="feat4-sub">Aucun compte requis, aucune donnée collectée, aucun tracking. Juste vous et vos trajets.</p>
+  </div>
+</section>
 
-</div><!-- /app -->
+<section class="cta-section">
+    <h2 class="cta-title" id="cta-title">Prêt à optimiser votre voyage ?</h2>
+    <a href="app.html" class="btn-primary" id="cta-btn">Ouvrir l'application</a>
+</section>
 
-<!-- Script sans module pour compatibilité Capacitor WebView -->
-<script src="js/app.js"></script>
+<footer>
+    <p id="footer-legal">© 2026 StellaSecret · TripMind est Open Source</p>
+    <div class="footer-links">
+        <a href="https://github.com/StellaSecret/TripMind" target="_blank">GitHub</a>
+        <a href="https://stellasecret.github.io/privacy-pages/tripmind/privacy.html" id="footer-privacy" target="_blank">Confidentialité</a>
+    </div>
+</footer>
+
+<script>
+    // Initialisation
+    (function() {
+      applyLang();
+      var isMobile = window.location.origin.includes('localhost') && !window.location.port;
+      var hasHash = window.location.hash && window.location.hash.length > 1;
+      if (isMobile || hasHash) {
+        document.getElementById('loading-overlay').style.display = 'flex';
+      }
+    })();
+</script>
+
 </body>
 </html>

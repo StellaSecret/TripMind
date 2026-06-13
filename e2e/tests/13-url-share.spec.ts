@@ -52,28 +52,28 @@ test.describe('URL share — restore from hash', () => {
   test('page restores origin and destination from hash', async ({ page }) => {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     await mockGoodConditions(page);
-    await page.goto(baseUrl + '#from=Paris&to=Lyon&d=0&h=8');
+    await page.goto(baseUrl + '/app.html' + '#from=Paris&to=Lyon&d=0&h=8');
     await expect(page.locator(SEL.origInput)).toHaveValue('Paris', { timeout: 3_000 });
     await expect(page.locator(SEL.destInput)).toHaveValue('Lyon');
   });
 
   test('malformed hash does not crash app', async ({ page }) => {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    await page.goto(baseUrl + '#not_valid_params!!!');
+    await page.goto(baseUrl + '/app.html' + '#not_valid_params!!!');
     // App should still load normally
     await expect(page.locator(SEL.scrSearch)).toHaveClass(/\bon\b/, { timeout: 5_000 });
   });
 
   test('empty hash does not affect app', async ({ page }) => {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    await page.goto(baseUrl + '#');
+    await page.goto(baseUrl + '/app.html' + '#');
     await expect(page.locator(SEL.scrSearch)).toHaveClass(/\bon\b/, { timeout: 5_000 });
   });
 
   test('hash with lang=en restores English language', async ({ page }) => {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     await mockGoodConditions(page);
-    await page.goto(baseUrl + '#from=Paris&to=Lyon&d=0&h=8&lang=en');
+    await page.goto(baseUrl + '/app.html' + '#from=Paris&to=Lyon&d=0&h=8&lang=en');
     await expect(page.locator(SEL.analyzeBtn)).toContainText('Analyze', { timeout: 3_000 });
   });
 });
