@@ -1319,6 +1319,55 @@
    *     }]
    *   }]
    * } */
+  function mergeSegments(legs) {
+    if (legs.length <= 1) return legs;
+
+    // Pass 1: Filter out placeholders
+    var cleaned = legs.filter(function(l) {
+        return !(l.mode === 'OTHER' && (l.routeShortName === '?' || !l.routeShortName));
+    });
+
+    if (cleaned.length <= 1) return cleaned;
+
+    // Pass 2: Merge transit/walk legs
+    var merged = [];
+    var current = Object.assign({}, cleaned[0]);
+
+    for (var i = 1; i < cleaned.length; i++) {
+      var next = cleaned[i];
+
+      var isSameMode = (current.mode === next.mode) ||
+                       (current.mode === 'OTHER' && next.headsign === current.headsign) ||
+                       (next.mode === 'OTHER' && next.headsign === current.headsign);
+
+      var isSameRoute = (current.routeShortName || '') === (next.routeShortName || '');
+      var isTrivialWalk = (next.mode === 'WALK' && next.duration < 180);
+
+      // Rule: Merge same transit legs, or absorb trivial walk between same transit legs
+      if (isSameMode && isSameRoute) {
+        current.endTime = next.endTime;
+        current.to = next.to;
+        current.duration += next.duration;
+      } else if (isTrivialWalk && (i + 1 < cleaned.length)) {
+        var nextNext = cleaned[i + 1];
+        if (current.mode === nextNext.mode && (current.routeShortName || '') === (nextNext.routeShortName || '')) {
+            current.endTime = nextNext.endTime;
+            current.to = nextNext.to;
+            current.duration += next.duration + nextNext.duration;
+            i++;
+        } else {
+            merged.push(current);
+            current = Object.assign({}, next);
+        }
+      } else {
+        merged.push(current);
+        current = Object.assign({}, next);
+      }
+    }
+    merged.push(current);
+    return merged;
+  }
+
   function parseMotisResponse(d) {
     var itins = d.itineraries;
     if (!itins || !itins.length) return { _empty: true, trains: [] };
@@ -1340,7 +1389,11 @@
     // "même premier train".
     var firstLegMap = {}; // key → itinéraire retenu
     ptItins.forEach(function(it) {
+      // Fusionner les segments redondants
+      it.legs = mergeSegments(it.legs);
+
       // Dedup key: first MAINLINE leg's tripId+startTime.
+
       // - Same train, different metro suffix → same tripId + same startTime → one entry kept.
       // - Delayed train (disruption day): same tripId, different startTime → kept separately
       //   then the real-time entry wins via the tie-break below.
@@ -1438,22 +1491,42 @@
         return /^[A-ZÀÂÉÈÊËÎÏÔÙÛÜÇ][a-zàâéèêëîïôùûüç]+$/.test(s);
       }
 
+      /* Nom de ligne : routeShortName en priorité (ex: "N", "RER C", "TGV"),
+       * sinon routeLongName, sinon headsign nettoyé. */
+      var rsn = (first.routeShortName || '').trim();
+      var rln = (first.routeLongName  || '').trim();
+      // Rejeter les IDs internes dans routeShortName aussi
+      var rsnClean = (rsn && !isInternalId(rsn) && rsn.length <= 10) ? rsn : '';
+      var rlnClean = (rln && !isInternalId(rln)) ? rln : '';
+
       var hs = first.headsign || '';
       var hsClean = (isInternalId(hs) || isStationName(hs)) ? '' : hs;
 
-      /* Si pas de headsign lisible, utiliser le nom de la gare d'arrivée
-       * du dernier leg TP (ex: "Paris Gare de Lyon") */
+      /* Destination finale = nom de la gare d'arrivée du dernier leg TP */
       var destName = '';
-      if (!hsClean && last.to && last.to.name) {
+      if (last.to && last.to.name) {
         var n = last.to.name;
-        // Exclure les noms génériques MOTIS
         if (n !== 'END' && n !== 'START' && n.length > 1) destName = n;
       }
 
       var mode  = modeToLabel(first.mode || '');
-      var label = hsClean  ? mode + ' → ' + hsClean
-                : destName ? mode + ' → ' + destName
-                :            mode;
+      /* Affichage :
+       * - Si on a un nom de ligne court (ex: "N") → "Train ligne N → Dest"
+       * - Si on a un nom long                     → "Train Nom Long"
+       * - Si on a un headsign lisible             → "Train → Headsign"
+       * - Sinon                                   → "Train → GareArrivée" ou "Train" */
+      var label;
+      if (rsnClean) {
+        label = mode + ' ligne ' + rsnClean + (destName ? ' → ' + destName : (hsClean ? ' → ' + hsClean : ''));
+      } else if (rlnClean) {
+        label = mode + ' ' + rlnClean;
+      } else if (hsClean) {
+        label = mode + ' → ' + hsClean;
+      } else if (destName) {
+        label = mode + ' → ' + destName;
+      } else {
+        label = mode;
+      }
 
       // Transfer count from allPtLegs — includes metro/tram for urban destinations
       var numTransfers = Math.max(0, allPtLegs.length - 1);
@@ -1466,8 +1539,12 @@
         var lTo   = (l.to   && l.to.name   && l.to.name   !== 'END')   ? l.to.name   : '';
         var lHs   = l.headsign || '';
         var lHsClean = (isInternalId(lHs) || isStationName(lHs)) ? '' : lHs;
+        var lRsn  = (l.routeShortName || '').trim();
+        var lRsnClean = (lRsn && !isInternalId(lRsn) && lRsn.length <= 10) ? lRsn : '';
         var lMode = modeToLabel(l.mode || '');
-        var lLabel = lHsClean ? lMode + ' ' + lHsClean : lMode;
+        var lLabel = lRsnClean ? lMode + ' ligne ' + lRsnClean
+                   : lHsClean  ? lMode + ' ' + lHsClean
+                   : lMode;
 
         /* Wait time before this leg = arrival of previous leg → departure of this one */
         var waitMin = 0;
@@ -2051,6 +2128,7 @@
             '</div>';
           }
           return '<div class="tc'+(tr.transfers>0?' tc-expand':'')+'">'+
+            '<div class="tc-header">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
             '<div><div class="ttime">'+tr.depart+'</div>'+
             '<div style="font-size:.6rem;color:var(--t3);font-family:var(--fm)">'+t('trainsDep')+'</div></div>'+
@@ -2065,11 +2143,13 @@
               :'<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">'+t('trainsDirect')+'</span>')+
             '<div style="display:flex;align-items:center;gap:3px;font-size:.62rem;font-family:var(--fm);color:var(--t2)">'+
             (tr.realTime
-              ? '<div class="rb"><div class="rf" style="width:'+tr.fiabilite+'%"></div></div>'+tr.fiabilite+'%</div>'+
-                '<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>'
+              ? '<div class="rb"><div class="rf" style="width:'+tr.fiabilite+'%"></div></div>'+tr.fiabilite+'%</div>'
+                +'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>'
               : '</div>'  /* no fake reliability bar without realtime data */
             )+
-            '</div></div>'+legsHtml+'</div>';
+            '</div></div>'+
+            '</div>'+
+            legsHtml+'</div>';
         }).join('');
     } else {
       tH='<div style="padding:8px;font-size:.75rem;color:var(--t3)">Aucun résultat.</div>';

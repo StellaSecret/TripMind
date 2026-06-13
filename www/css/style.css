@@ -227,8 +227,9 @@ a{color:var(--blue)}
 .rtxt{font-size:.74rem;color:var(--t2);line-height:1.5}
 
 /* ── Train cards ────────────────────────────────────── */
-.tc{background:var(--bg2);border-radius:9px;padding:10px;margin-bottom:6px;border-left:3px solid var(--blue);display:flex;align-items:center;gap:8px}
-.tc-expand{flex-wrap:wrap;border-left-color:var(--amber)}
+.tc{background:var(--bg2);border-radius:9px;padding:10px;margin-bottom:6px;border-left:3px solid var(--blue);display:flex;flex-direction:column;gap:0}
+.tc-header{display:flex;align-items:center;gap:8px;width:100%}
+.tc-expand{border-left-color:var(--amber)}
 .ttime{font-size:.92rem;font-weight:800;font-family:var(--fm)}
 .tmeta{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
 .tnum{font-size:.62rem;font-family:var(--fm);color:var(--t3)}
