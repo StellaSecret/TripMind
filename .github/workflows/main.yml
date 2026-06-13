@@ -14,6 +14,10 @@ permissions:
   security-events: write
   actions: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ── SÉCURITÉ 1 : SCAN DE SECRETS ───────────────────────
   scan-secrets:
