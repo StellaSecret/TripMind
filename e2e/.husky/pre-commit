@@ -115,27 +115,24 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
-# 5. CAP SYNC REMINDER — warn if www/ changed but android/ was
-#    not synced (i.e. no android/ file is staged alongside it)
-#    Capacitor copies www/ into the Android asset bundle; without
-#    a sync the APK will ship the old JS.
-#    (warning only, does not block — sync happens at build time)
+# 5. CAP SYNC — automatically sync www/ to android/ if changed.
 # ─────────────────────────────────────────────────────────────
 echo "📱 [5/5] Checking Capacitor sync…"
 
 WWW_CHANGED_CAP=$(echo "$STAGED" | grep '^www/' || true)
-ANDROID_CHANGED=$(echo "$STAGED" | grep '^android/' || true)
 
-if [ -n "$WWW_CHANGED_CAP" ] && [ -z "$ANDROID_CHANGED" ]; then
-  echo ""
-  echo "⚠️  WARNING: www/ modified but no android/ files staged."
-  echo "   Changed: $(echo "$WWW_CHANGED_CAP" | tr '\n' ' ')"
-  echo "   Run 'npx cap sync android' before building the APK,"
-  echo "   otherwise the Android app will ship the old www/ bundle."
-  echo "   (Warning only — commit proceeds)"
-  echo ""
+if [ -n "$WWW_CHANGED_CAP" ]; then
+  echo "   Syncing www/ to android/..."
+  if npx cap sync android > /dev/null 2>&1; then
+      # Need to stage the Android changes so they are included in the commit
+      git add android/
+      echo "   ✓ Capacitor sync successful and staged."
+  else
+      echo "   ❌ ERROR: Capacitor sync failed."
+      exit 1
+  fi
 else
-  echo "   ✓ Capacitor sync looks up to date"
+  echo "   ✓ No web changes, Capacitor sync skipped."
 fi
 
 echo ""
