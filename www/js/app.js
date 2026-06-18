@@ -1563,15 +1563,14 @@
       }) : [];
 
       return {
-        // from.departure / to.arrival = heure réelle en gare (scheduled stop time)
-        // first.startTime peut inclure un décalage de marche → on préfère from.departure
-        depart:    isoToHHMM((first.from && first.from.departure) || first.startTime || it.startTime),
+        // Departure = first PT leg overall (may be metro/tram before mainline train).
+        // first.from.departure would give the mainline train time, missing the earlier metro leg.
+        depart:    isoToHHMM((allPtLegs[0] && allPtLegs[0].from && allPtLegs[0].from.departure) || (allPtLegs[0] && allPtLegs[0].startTime) || it.startTime),
         arrivee:   isoToHHMM((last.to   && last.to.arrival)      || last.endTime    || it.endTime),
         // Durée = uniquement le temps en transport (sans marche initiale/finale)
         duree:     (function() {
-                     // Wall-clock duration: first PT departure → last PT arrival.
-                     // Summing leg.duration misses walk/wait time between legs.
-                     var depStr = (first.from && first.from.departure) || first.startTime || it.startTime;
+                     // Wall-clock duration: first PT departure (incl. metro) → last PT arrival.
+                     var depStr = (allPtLegs[0] && allPtLegs[0].from && allPtLegs[0].from.departure) || (allPtLegs[0] && allPtLegs[0].startTime) || it.startTime;
                      var arrStr = (last.to   && last.to.arrival)      || last.endTime    || it.endTime;
                      var secs   = depStr && arrStr ? (new Date(arrStr) - new Date(depStr)) / 1000 : 0;
                      return secs > 0 ? fmtDur(secs) : fmtDur(allPtLegs.reduce(function(acc, l) { return acc + (l.duration || 0); }, 0));
