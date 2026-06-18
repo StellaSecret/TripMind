@@ -560,9 +560,9 @@
     var container = $('time-picker');
     if (!container) return;
     container.innerHTML = '';
-    // Slots: every hour from 05:00 to 22:00
+    // Slots: every hour from 00:00 to 23:00
     var hours = [];
-    for (var h = 5; h <= 22; h++) hours.push(h);
+    for (var h = 0; h <= 23; h++) hours.push(h);
     hours.forEach(function(h) {
       var chip = document.createElement('button');
       chip.className = 'time-chip' + (h === selectedTrainHour ? ' active' : '');

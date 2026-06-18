@@ -16,17 +16,17 @@ test.describe('Time picker — static layout', () => {
     await expect(page.locator(TIME_SECTION)).toBeVisible();
   });
 
-  test('time picker renders chips from 05:00 to 22:00', async ({ page }) => {
+  test('time picker renders chips from 00:00 to 23:00', async ({ page }) => {
     const chips = page.locator(`${TIME_PICKER} .time-chip`);
-    await expect(chips).toHaveCount(18); // 05→22 inclusive
+    await expect(chips).toHaveCount(24); // 00→23 inclusive
   });
 
-  test('first chip is 05:00', async ({ page }) => {
-    await expect(page.locator(`${TIME_PICKER} .time-chip`).first()).toHaveText('05:00');
+  test('first chip is 00:00', async ({ page }) => {
+    await expect(page.locator(`${TIME_PICKER} .time-chip`).first()).toHaveText('00:00');
   });
 
-  test('last chip is 22:00', async ({ page }) => {
-    await expect(page.locator(`${TIME_PICKER} .time-chip`).last()).toHaveText('22:00');
+  test('last chip is 23:00', async ({ page }) => {
+    await expect(page.locator(`${TIME_PICKER} .time-chip`).last()).toHaveText('23:00');
   });
 
   test('exactly one chip is active by default', async ({ page }) => {
@@ -35,7 +35,7 @@ test.describe('Time picker — static layout', () => {
   });
 
   test('clicking a chip makes it active and deactivates others', async ({ page }) => {
-    await page.locator(`${TIME_PICKER} .time-chip`).nth(5).click(); // 10:00
+    await page.locator(`${TIME_PICKER} .time-chip[data-hour="10"]`).click();
     const active = page.locator(`${TIME_PICKER} .time-chip.active`);
     await expect(active).toHaveCount(1);
     await expect(active).toHaveText('10:00');
