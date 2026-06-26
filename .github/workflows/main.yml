@@ -258,9 +258,9 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          VCODE=$(date -u +%Y%m%d)${{ github.run_number }}
-          sed -i "s/versionCode .*/versionCode $VCODE/" app/build.gradle
+          VCODE=$(date -u +%Y%m%d)$(printf '%02d' $(( ${{ github.run_number }} % 100 )))
           ./gradlew bundleRelease assembleRelease --no-daemon \
+            -PversionCode=$VCODE \
             -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/android/app/tripmind-release.jks \
             -Pandroid.injected.signing.store.password="${{ secrets.STORE_PASSWORD }}" \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
