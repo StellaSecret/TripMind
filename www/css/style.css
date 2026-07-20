@@ -374,17 +374,35 @@ a{color:var(--blue)}
 }
 
 
-/* ─── Time picker ─────────────────────────────────────── */
+/* ─── Time picker (scrollable HH:MM wheel) ──────────────── */
 .time-section{margin:6px 0 10px;animation:fadeIn .2s}
-.time-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.time-chip{padding:5px 12px;border-radius:20px;border:1px solid var(--bd);
-  background:var(--bg2);color:var(--t2);font-size:.72rem;font-family:var(--fm);
-  cursor:pointer;transition:all .15s}
-.time-chip:hover{border-color:var(--cyan);color:var(--cyan)}
-.time-chip.active{background:rgba(6,182,212,.15);border-color:var(--cyan);
-  color:var(--cyan);font-weight:700}
-.time-chip.past{opacity:.35;cursor:default}
-.time-chip.past:hover{border-color:var(--bd);color:var(--t2)}
+
+.time-wheel{position:relative;display:flex;align-items:center;justify-content:center;
+  gap:2px;height:140px;margin-top:6px;background:var(--bg2);border:1px solid var(--bd);
+  border-radius:14px;overflow:hidden}
+.tw-col{position:relative;height:140px;width:64px;overflow-y:scroll;
+  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;padding:52px 0}
+.tw-col::-webkit-scrollbar{display:none}
+.tw-item{height:36px;line-height:36px;text-align:center;font-family:var(--fm);
+  font-size:1rem;color:var(--t3);scroll-snap-align:center;cursor:pointer;
+  transition:color .15s,font-size .15s;user-select:none}
+.tw-item.tw-active{color:var(--cyan);font-weight:700;font-size:1.3rem}
+.tw-sep{font-family:var(--fm);font-size:1.3rem;font-weight:700;color:var(--t2);
+  margin:0 1px}
+.time-wheel::before,.time-wheel::after{content:'';position:absolute;left:0;right:0;
+  height:52px;pointer-events:none;z-index:2}
+.time-wheel::before{top:0;background:linear-gradient(var(--bg2),transparent)}
+.time-wheel::after{bottom:0;background:linear-gradient(transparent,var(--bg2))}
+.tw-highlight{position:absolute;left:6px;right:6px;top:50%;transform:translateY(-50%);
+  height:38px;border-top:1px solid var(--bd2);border-bottom:1px solid var(--bd2);
+  background:rgba(6,182,212,.06);border-radius:8px;pointer-events:none;z-index:1}
+
+.time-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.time-now-btn{font-size:.6rem;font-family:var(--fm);color:var(--t3);letter-spacing:.5px;
+  cursor:pointer;padding:3px 9px;border:1px solid var(--bd);border-radius:20px;
+  background:var(--bg1);transition:all .15s}
+.time-now-btn:hover{color:var(--cyan);border-color:var(--cyan)}
 
 /* ─── Cache hit badge ─────────────────────────────────── */
 .cache-badge{display:inline-flex;align-items:center;gap:4px;

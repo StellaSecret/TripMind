@@ -114,8 +114,9 @@
       trainsLoading: 'Chargement des trains…',
       trainsOverloadNote: 'Transitous est un service communautaire bénévole à ressources limitées. Les 500/504 indiquent une surcharge temporaire — les données de trains seront disponibles dans quelques minutes.',
       trainsErrNote: 'En cas de panne persistante, consultez directement SNCF Connect.',
-      trainsEmpty: function(off, label, hour) { return 'Aucun trajet en transport commun trouvé'+(off>0?' pour le '+label+' à partir de '+(hour||'08')+'h00':'')+". Cette liaison n'est peut-être pas desservie par train direct."; },
-      trainsFuture: function(label, hour) { return '📅 Trains du '+label+' à partir de '+(hour||'08')+'h00'; },
+      trainsEmpty: function(off, label, hhmm) { return 'Aucun trajet en transport commun trouvé'+(off>0?' pour le '+label+' à partir de '+(hhmm||'08:00'):'')+". Cette liaison n'est peut-être pas desservie par train direct."; },
+      trainsFuture: function(label, hhmm) { return '📅 Trains du '+label+' à partir de '+(hhmm||'08:00'); },
+      timeNowBtn: 'Maintenant',
       trainsDep: 'Dép.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' corresp.'; },
       trainsChange: 'Correspondance', trainsWait: function(m) { return 'Attente '+m+' min'; },
@@ -270,8 +271,9 @@
       trainsLoading: 'Loading trains…',
       trainsOverloadNote: 'Transitous is a volunteer community service with limited resources. 500/504 errors indicate temporary overload — train data will be available in a few minutes.',
       trainsErrNote: 'If the issue persists, check SNCF Connect directly.',
-      trainsEmpty: function(off, label, hour) { return 'No public transport connection found'+(off>0?' for '+label+' from '+(hour||'08')+':00':'')+'. This route may not be served by a direct train.'; },
-      trainsFuture: function(label, hour) { return '📅 Trains on '+label+' from '+(hour||'08')+':00'; },
+      trainsEmpty: function(off, label, hhmm) { return 'No public transport connection found'+(off>0?' for '+label+' from '+(hhmm||'08:00'):'')+'. This route may not be served by a direct train.'; },
+      trainsFuture: function(label, hhmm) { return '📅 Trains on '+label+' from '+(hhmm||'08:00'); },
+      timeNowBtn: 'Now',
       trainsDep: 'Dep.', trainsArr: 'Arr.',
       trainsDirect: 'Direct', trainsTransfers: function(n) { return n+' change'+(n>1?'s':''); },
       trainsChange: 'Change', trainsWait: function(m) { return 'Wait '+m+' min'; },
@@ -368,6 +370,12 @@
     var h = new Date().getHours() + 1;
     return Math.min(22, Math.max(5, h));
   })();
+  /* Minute component (0–59) of the chosen train departure time. Reset to 0
+   * whenever the date changes; free-picked by the user via the time wheel. */
+  var selectedTrainMinute = 0;
+
+  /* "HH:MM" string for the currently selected train departure time */
+  function trainTimeStr() { return pad(selectedTrainHour) + ':' + pad(selectedTrainMinute); }
 
   /* Retourne le décalage en jours entre selectedDate et aujourd'hui */
   function dayOffset() {
@@ -538,6 +546,7 @@
           selectedTrainHour = (date - new Date().setHours(0,0,0,0) < 86400000)
             ? Math.min(22, Math.max(5, nowH))
             : 8;
+          selectedTrainMinute = 0;
           buildTimePicker();
           updateDateDisplay();
           // No cache clear — old entries are still valid for other date/time combos
@@ -556,27 +565,104 @@
     if (ts) ts.style.display = ''; // always show — useful for today too
   }
 
+  var ITEM_H = 36; // must match .tw-item height in CSS
+
+  /* Builds one scrollable wheel column (hour or minute).
+   * values: array of numbers to display (already padded on render)
+   * current: currently selected value
+   * onPick(v): called whenever the centred item changes */
+  function buildWheelColumn(values, current, onPick) {
+    var col = document.createElement('div');
+    col.className = 'tw-col';
+
+    values.forEach(function(v) {
+      var item = document.createElement('div');
+      item.className = 'tw-item' + (v === current ? ' tw-active' : '');
+      item.textContent = pad(v);
+      item.dataset.val = v;
+      item.addEventListener('click', function() {
+        scrollColTo(col, values.indexOf(v));
+      });
+      col.appendChild(item);
+    });
+
+    var settleTimer = null;
+    function syncActive() {
+      var idx = Math.round(col.scrollTop / ITEM_H);
+      idx = Math.max(0, Math.min(values.length - 1, idx));
+      var v = values[idx];
+      col.querySelectorAll('.tw-item').forEach(function(it, i) {
+        it.classList.toggle('tw-active', i === idx);
+      });
+      onPick(v);
+      return idx;
+    }
+    col.addEventListener('scroll', function() {
+      syncActive(); // live-update the highlighted value & state while scrolling
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(function() {
+        // Snap precisely once scrolling has settled (covers browsers/webviews
+        // with imprecise scroll-snap behaviour)
+        var idx = syncActive();
+        scrollColTo(col, idx, true);
+      }, 120);
+    }, { passive: true });
+
+    // Initial scroll position (no smooth animation on first paint)
+    requestAnimationFrame(function() {
+      scrollColTo(col, values.indexOf(current), false);
+    });
+
+    return col;
+  }
+
+  function scrollColTo(col, idx, smooth) {
+    col.scrollTo({ top: idx * ITEM_H, behavior: smooth === false ? 'auto' : 'smooth' });
+  }
+
   function buildTimePicker() {
     var container = $('time-picker');
     if (!container) return;
     container.innerHTML = '';
-    // Slots: every hour from 00:00 to 23:00
+
     var hours = [];
     for (var h = 0; h <= 23; h++) hours.push(h);
-    hours.forEach(function(h) {
-      var chip = document.createElement('button');
-      chip.className = 'time-chip' + (h === selectedTrainHour ? ' active' : '');
-      chip.textContent = pad(h) + ':00';
-      chip.dataset.hour = h;
-      chip.addEventListener('click', function() {
-        selectedTrainHour = +this.dataset.hour;
-        container.querySelectorAll('.time-chip').forEach(function(c) { c.classList.remove('active'); });
-        this.classList.add('active');
-        // Invalidate cache when time changes
-        // Cache entry for this new time will be created fresh on next analyze()
-      });
-      container.appendChild(chip);
-    });
+    var minutes = [];
+    for (var m = 0; m <= 55; m += 5) minutes.push(m);
+    // Keep the currently selected minute selectable even if it isn't on the
+    // 5-min grid (e.g. restored from a shared link) by snapping to nearest.
+    var nearestMinute = minutes.reduce(function(best, v) {
+      return Math.abs(v - selectedTrainMinute) < Math.abs(best - selectedTrainMinute) ? v : best;
+    }, 0);
+    if (nearestMinute !== selectedTrainMinute) selectedTrainMinute = nearestMinute;
+
+    var highlight = document.createElement('div');
+    highlight.className = 'tw-highlight';
+
+    var hourCol = buildWheelColumn(hours, selectedTrainHour, function(v) { selectedTrainHour = v; });
+    var sep = document.createElement('div');
+    sep.className = 'tw-sep';
+    sep.textContent = ':';
+    var minCol = buildWheelColumn(minutes, selectedTrainMinute, function(v) { selectedTrainMinute = v; });
+
+    container.appendChild(highlight);
+    container.appendChild(hourCol);
+    container.appendChild(sep);
+    container.appendChild(minCol);
+
+    var nowBtn = $('time-now-btn');
+    if (nowBtn) {
+      nowBtn.onclick = function() {
+        var n = new Date();
+        var nh = Math.min(23, n.getHours());
+        var nm = Math.round(n.getMinutes() / 5) * 5;
+        if (nm >= 60) { nm = 0; nh = Math.min(23, nh + 1); }
+        selectedTrainHour = nh;
+        selectedTrainMinute = nm;
+        scrollColTo(hourCol, hours.indexOf(nh));
+        scrollColTo(minCol, minutes.indexOf(nm));
+      };
+    }
   }
 
   /* ─── AUTOCOMPLÉTION BAN ─────────────────────────── */
@@ -1589,14 +1675,16 @@
   function fetchTrains(oLat, oLon, dLat, dLon) {
     var dt = new Date(selectedDate);
     if (dayOffset() > 0) {
-      dt.setHours(selectedTrainHour, 0, 0, 0);
+      dt.setHours(selectedTrainHour, selectedTrainMinute, 0, 0);
     } else {
-      // Today: use selectedTrainHour if it's in the future, otherwise current time
-      var nowHour = new Date().getHours();
-      if (selectedTrainHour > nowHour) {
-        dt.setHours(selectedTrainHour, 0, 0, 0);
+      // Today: use the chosen time if it's still in the future, otherwise current time
+      var now = new Date();
+      var nowMin = now.getHours() * 60 + now.getMinutes();
+      var chosenMin = selectedTrainHour * 60 + selectedTrainMinute;
+      if (chosenMin > nowMin) {
+        dt.setHours(selectedTrainHour, selectedTrainMinute, 0, 0);
       } else {
-        dt = new Date(); // already past chosen hour — show next trains from now
+        dt = new Date(); // already past chosen time — show next trains from now
       }
     }
 
@@ -2107,9 +2195,9 @@
            ? '<div class="info-note">'+t('trainsOverloadNote')+'</div>'
            : '<div class="info-note">'+t('trainsErrNote')+'</div>');
     } else if (trains._empty) {
-      tH='<div class="ai"><span>ℹ️</span><span class="at">'+t('trainsEmpty')(off,dateLabel(selectedDate),pad(selectedTrainHour))+'</span></div>';
+      tH='<div class="ai"><span>ℹ️</span><span class="at">'+t('trainsEmpty')(off,dateLabel(selectedDate),trainTimeStr())+'</span></div>';
     } else if (trains.trains && trains.trains.length) {
-      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">'+t('trainsFuture')(dateLabel(selectedDate),pad(selectedTrainHour))+'</div>':'')+
+      tH=(off>0?'<div class="info-note" style="margin-bottom:8px">'+t('trainsFuture')(dateLabel(selectedDate),trainTimeStr())+'</div>':'')+
         trains.trains.map(function(tr,i){
           var legsHtml = '';
           if (tr.transfers > 0 && tr.legs && tr.legs.length) {
@@ -2255,6 +2343,7 @@
       to:   dest,
       d:    dayOffset(),
       h:    selectedTrainHour,
+      m:    selectedTrainMinute,
       lang: LANG,
     });
     return baseUrl + '#' + params.toString();
@@ -2276,8 +2365,10 @@
         if (chip) chip.click();
       }
       var h = parseInt(p.get('h') || '8', 10);
-      if (h >= 5 && h <= 22) {
+      var m = parseInt(p.get('m') || '0', 10);
+      if (h >= 0 && h <= 23) {
         selectedTrainHour = h;
+        selectedTrainMinute = (m >= 0 && m <= 59) ? m : 0;
         buildTimePicker();
       }
       var lang = p.get('lang');
@@ -2297,16 +2388,17 @@
     $('ebox').style.display='none';
 
     // ── Cache check ──────────────────────────────────────
-    // When selectedTrainHour is in the past (today only), the actual query uses
+    // When the chosen time is in the past (today only), the actual query uses
     // current time — use current hour:minute as the cache key to avoid collisions
-    // with stale entries from earlier queries at the same nominal hour.
+    // with stale entries from earlier queries at the same nominal time.
     var nowHourMin = (function() {
       var n = new Date();
       return n.getHours() * 60 + n.getMinutes();
     })();
-    var cacheHour = (dayOffset() === 0 && selectedTrainHour * 60 <= nowHourMin)
+    var chosenHourMin = selectedTrainHour * 60 + selectedTrainMinute;
+    var cacheHour = (dayOffset() === 0 && chosenHourMin <= nowHourMin)
       ? ('now' + Math.floor(nowHourMin / 5)) // bucket by 5-min window
-      : selectedTrainHour;
+      : trainTimeStr();
     var cKey = ANALYSIS_CACHE.key(orig, dest, dayOffset(), cacheHour);
     var cached = ANALYSIS_CACHE.get(cKey);    if (cached) {
       DATA = cached;
@@ -2328,6 +2420,7 @@
           to:   DATA.dName,
           d:    dayOffset(),
           h:    selectedTrainHour,
+          m:    selectedTrainMinute,
           lang: LANG,
         });
         window.location.hash = params.toString();
@@ -2452,6 +2545,7 @@
           to:   ctx.dGeo.name,
           d:    dayOffset(),
           h:    selectedTrainHour,
+          m:    selectedTrainMinute,
           lang: LANG,
         });
         window.location.hash = params.toString();
