@@ -594,7 +594,13 @@
           item.dataset.copy = r; // which of the 3 copies — lets tests target a specific instance
           item.addEventListener('click', function() {
             applySelection(idx);
-            scrollColTo(col, idx); // purely cosmetic re-centering from here on
+            // Instant, not smooth: this recenter is purely cosmetic, and an
+            // animated scroll here races with the settle-detection used by
+            // callers/tests (col._programmatic can be cleared by the
+            // fallback timer in scrollColTo before a smooth animation has
+            // actually finished, letting a subsequent scroll step land on
+            // top of a still-animating scrollTop and silently "eat" a row).
+            scrollColTo(col, idx, false);
           });
           col.appendChild(item);
           allItems.push(item);
@@ -630,6 +636,7 @@
     }
 
     var settleTimer = null;
+    col._disposed = false;
     function syncActive() {
       var idx = Math.round(col.scrollTop / ITEM_H);
       idx = Math.max(0, Math.min(allItems.length - 1, idx));
@@ -637,11 +644,13 @@
       return idx;
     }
     col.addEventListener('scroll', function() {
+      if (col._disposed) return; // replaced by a newer buildTimePicker() — don't clobber the current picker's state
       if (col._programmatic) return; // our own scrollTo — state already applied by the caller
       syncActive(); // live-update the highlighted value & state while scrolling
       rewrapIfNeeded();
       clearTimeout(settleTimer);
       settleTimer = setTimeout(function() {
+        if (col._disposed) return;
         // Snap precisely once scrolling has settled (covers browsers/webviews
         // with imprecise scroll-snap behaviour)
         var idx = syncActive();
@@ -691,17 +700,45 @@
     if (Math.round(col.scrollTop) === target) return; // already there — nothing would fire 'scrollend'
     col._programmatic = true;
     clearTimeout(col._programmaticClearTimer);
+    // Attach the listener *before* starting the scroll — an instant ('auto')
+    // scroll can fire 'scrollend' almost immediately, and attaching after
+    // scrollTo() risks missing it, which would leave us relying solely on
+    // the 500ms fallback below.
+    col.addEventListener('scrollend', onScrollEnd, { once: true });
     col.scrollTo({ top: target, behavior: smooth === false ? 'auto' : 'smooth' });
-    col.addEventListener('scrollend', clearFlag, { once: true });
     // Fallback for engines without 'scrollend' (older WebKit/Safari) — a
     // generous timeout well past any plausible smooth-scroll duration.
     col._programmaticClearTimer = setTimeout(clearFlag, 500);
+    function onScrollEnd() {
+      if (col._disposed) return;
+      // The container has `scroll-snap-type: mandatory`, which can trigger
+      // its own follow-up snap correction as a *second*, separate scroll
+      // shortly after this one finishes. Clearing the flag the instant
+      // 'scrollend' fires re-opens the live-scroll listener too early, so a
+      // late snap correction gets misread as a real user scroll and can
+      // silently overwrite the just-applied selection. Give it a short
+      // grace window with no further scrolling before trusting live scroll
+      // events again.
+      clearTimeout(col._programmaticClearTimer);
+      col._programmaticClearTimer = setTimeout(clearFlag, 150);
+    }
     function clearFlag() { col._programmatic = false; }
   }
 
   function buildTimePicker() {
     var container = $('time-picker');
     if (!container) return;
+    // Any previous columns being replaced may still have a pending settle
+    // timer in flight (see buildWheelColumn's `scroll` listener) — once
+    // detached, their scrollTop reads back as 0, so if left to fire that
+    // timer would recompute idx from a bogus 0 and overwrite the new
+    // picker's just-applied selection via the old onPick closure (both old
+    // and new columns close over the same selectedTrainHour/Minute
+    // variables). Disarm them first.
+    Array.prototype.forEach.call(container.querySelectorAll('.tw-col'), function(oldCol) {
+      oldCol._disposed = true;
+      clearTimeout(oldCol._programmaticClearTimer);
+    });
     container.innerHTML = '';
 
     var hours = [];
