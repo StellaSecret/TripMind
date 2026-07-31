@@ -4,6 +4,41 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TripMind — Votre assistant de déplacement intelligent</title>
+  <meta name="description" content="Météo, qualité de l'air, pollen et trains SNCF en temps réel pour vos déplacements en France. Gratuit, sans compte, sans tracking.">
+  <meta name="theme-color" content="#080C14">
+  <link rel="canonical" href="https://stellasecret.github.io/TripMind/">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="TripMind">
+  <meta property="og:url" content="https://stellasecret.github.io/TripMind/">
+  <meta property="og:title" content="TripMind — Votre assistant de déplacement intelligent">
+  <meta property="og:description" content="Météo, qualité de l'air, pollen et trains SNCF en temps réel pour vos déplacements en France. Gratuit, sans compte, sans tracking.">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="TripMind">
+  <meta name="twitter:description" content="Météo, qualité de l'air, pollen et trains SNCF en temps réel pour vos déplacements en France. Gratuit, sans compte, sans tracking.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "TripMind",
+    "url": "https://stellasecret.github.io/TripMind/",
+    "description": "Assistant de déplacement pour la France : météo, qualité de l'air, pollen et trains SNCF en temps réel. Gratuit, sans compte, sans tracking.",
+    "applicationCategory": "TravelApplication",
+    "operatingSystem": "Android",
+    "inLanguage": ["fr", "en"],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "EUR"
+    },
+    "installUrl": "https://play.google.com/store/apps/details?id=com.stellasecret.tripmind",
+    "publisher": {
+      "@type": "Organization",
+      "name": "StellaSecret",
+      "url": "https://stellasecret.github.io/"
+    }
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Lexend:wght@300;400;500;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
   <script>
@@ -203,6 +238,47 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-main);
   transition: color 0.2s ease;
 }
 .btn-secondary:hover { color: var(--text); }
+
+/* ── PLAY STORE BADGE ── */
+.play-badge {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  background: #000; border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 14px; padding: 0.55rem 1.15rem 0.55rem 0.8rem;
+  text-decoration: none; color: #fff;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.play-badge:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+.play-badge-icon { width: 28px; height: 28px; flex-shrink: 0; display: block; }
+.play-badge-text { display: flex; flex-direction: column; line-height: 1.2; text-align: left; }
+.play-badge-text small { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; color: #9AA3B5; font-family: var(--font-mono); }
+.play-badge-text strong { font-size: 0.95rem; font-weight: 700; font-family: var(--font-display); letter-spacing: -0.01em; }
+
+/* ── ANDROID INSTALL BANNER ── */
+.android-banner {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
+  background: var(--nav-bg); border-top: 1px solid var(--border);
+  backdrop-filter: blur(20px); padding: 0.9rem 1.25rem;
+  transform: translateY(100%); transition: transform 0.35s ease;
+}
+.android-banner.show { transform: translateY(0); }
+.android-banner-inner {
+  max-width: 960px; margin: 0 auto; display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+}
+.android-banner-text { flex: 1; min-width: 200px; display: flex; flex-direction: column; }
+.android-banner-text strong { font-family: var(--font-display); font-size: 0.95rem; font-weight: 700; }
+.android-banner-text span { color: var(--text-muted); font-size: 0.8rem; }
+.android-banner-btn {
+  background: var(--cyan); color: #080C14; font-family: var(--font-display);
+  font-weight: 700; font-size: 0.85rem; padding: 0.55rem 1.1rem; border-radius: var(--radius);
+  text-decoration: none; white-space: nowrap; transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.android-banner-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,212,170,0.25); }
+.android-banner-close {
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted);
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; flex-shrink: 0;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.android-banner-close:hover { border-color: var(--border-hover); color: var(--text); }
 
 /* ── TRUST BAR ── */
 .trust-bar {
@@ -510,6 +586,10 @@ footer {
         heroSub: "Météo, qualité de l'air, pollen et trains en temps réel pour vos déplacements en France — sans compte, sans tracking.",
         heroBtn: "Commencer l'analyse",
         heroSecondary: "Voir comment ça marche",
+        playBadgeTop: "Disponible sur", playBadgeName: "Google Play",
+        androidBannerTitle: "TripMind sur Android",
+        androidBannerSub: "Installez l'application officielle, gratuite, depuis le Google Play Store.",
+        androidBannerBtn: "Installer",
         heroFrom: "Paris", heroTo: "Lyon", heroFromLabel: "Départ", heroToLabel: "Arrivée",
         mockupLabel: "Aperçu de l'application",
         mFrom: "Paris", mTo: "Lyon", mDate: "Aujourd'hui",
@@ -572,6 +652,10 @@ footer {
         heroSub: "Real-time weather, air quality, pollen and train data for your journeys in France — no account, no tracking.",
         heroBtn: "Start analysis",
         heroSecondary: "See how it works",
+        playBadgeTop: "Get it on", playBadgeName: "Google Play",
+        androidBannerTitle: "TripMind on Android",
+        androidBannerSub: "Install the official app, free, from the Google Play Store.",
+        androidBannerBtn: "Install",
         heroFrom: "Paris", heroTo: "Lyon", heroFromLabel: "From", heroToLabel: "To",
         mockupLabel: "App preview",
         mFrom: "Paris", mTo: "Lyon", mDate: "Today",
@@ -640,6 +724,11 @@ footer {
       var map = {
         'nav-launch': 'navLaunch','hero-eyebrow-text':'eyebrow',
         'hero-title':'heroTitle','hero-sub':'heroSub','hero-btn':'heroBtn',
+        'hero-play-top':'playBadgeTop','hero-play-name':'playBadgeName',
+        'cta-play-top':'playBadgeTop','cta-play-name':'playBadgeName',
+        'android-banner-title':'androidBannerTitle',
+        'android-banner-sub':'androidBannerSub',
+        'android-banner-btn':'androidBannerBtn',
         'hero-secondary':'heroSecondary','hero-from-label':'heroFromLabel',
         'hero-to-label':'heroToLabel','hero-from-name':'heroFrom','hero-to-name':'heroTo',
         'mockup-label':'mockupLabel',
@@ -758,6 +847,23 @@ footer {
 
   <div class="hero-cta-row">
     <a href="app.html" class="btn-primary" id="hero-btn">Commencer l'analyse</a>
+    <a href="https://play.google.com/store/apps/details?id=com.stellasecret.tripmind" target="_blank" rel="noopener noreferrer" class="play-badge" aria-label="Google Play">
+      <svg class="play-badge-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <linearGradient id="playGrad1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#00A0FF"/>
+            <stop offset="0.35" stop-color="#00E3A5"/>
+            <stop offset="0.65" stop-color="#FFCE00"/>
+            <stop offset="1" stop-color="#FF3A00"/>
+          </linearGradient>
+        </defs>
+        <path fill="url(#playGrad1)" d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z"/>
+      </svg>
+      <span class="play-badge-text">
+        <small id="hero-play-top">Disponible sur</small>
+        <strong id="hero-play-name">Google Play</strong>
+      </span>
+    </a>
     <a href="#mockup" class="btn-secondary" id="hero-secondary">
       Voir comment ça marche ↓
     </a>
@@ -772,6 +878,8 @@ footer {
     <div class="trust-item"><span class="trust-icon">🌿</span> 5 espèces pollen</div>
     <div class="trust-sep"></div>
     <div class="trust-item"><span class="trust-icon">🚆</span> Données SNCF ouvertes</div>
+    <div class="trust-sep"></div>
+    <div class="trust-item"><span class="trust-icon">🤖</span> Android</div>
   </div>
 </section>
 
@@ -1002,6 +1110,25 @@ footer {
     <h2 class="cta-title" id="cta-title">Prêt à partir ?</h2>
     <p class="cta-sub" id="cta-sub">Analysez votre prochain trajet en quelques secondes.</p>
     <a href="app.html" class="btn-primary" id="cta-btn">Ouvrir l'application</a>
+    <div style="margin-top: 1rem;">
+      <a href="https://play.google.com/store/apps/details?id=com.stellasecret.tripmind" target="_blank" rel="noopener noreferrer" class="play-badge" aria-label="Google Play">
+        <svg class="play-badge-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <defs>
+            <linearGradient id="playGrad2" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#00A0FF"/>
+              <stop offset="0.35" stop-color="#00E3A5"/>
+              <stop offset="0.65" stop-color="#FFCE00"/>
+              <stop offset="1" stop-color="#FF3A00"/>
+            </linearGradient>
+          </defs>
+          <path fill="url(#playGrad2)" d="M22.018 13.298l-3.919 2.218-3.515-3.493 3.543-3.521 3.891 2.202a1.49 1.49 0 0 1 0 2.594zM1.337.924a1.486 1.486 0 0 0-.112.568v21.017c0 .217.045.419.124.6l11.155-11.087L1.337.924zm12.207 10.065l3.258-3.238L3.45.195a1.466 1.466 0 0 0-.946-.179l11.04 10.973zm0 2.067l-11 10.933c.298.036.612-.016.906-.183l13.324-7.54-3.23-3.21z"/>
+        </svg>
+        <span class="play-badge-text">
+          <small id="cta-play-top">Disponible sur</small>
+          <strong id="cta-play-name">Google Play</strong>
+        </span>
+      </a>
+    </div>
     <div class="cta-badges">
       <div class="cta-badge">✓ <span id="cta-badge1">Aucune inscription</span></div>
       <div class="cta-badge">✓ <span id="cta-badge2">100% gratuit</span></div>
@@ -1009,6 +1136,18 @@ footer {
     </div>
   </div>
 </section>
+
+<!-- ANDROID INSTALL BANNER -->
+<div class="android-banner" id="android-banner">
+  <div class="android-banner-inner">
+    <div class="android-banner-text">
+      <strong id="android-banner-title">TripMind sur Android</strong>
+      <span id="android-banner-sub">Installez l'application officielle, gratuite, depuis le Google Play Store.</span>
+    </div>
+    <a class="android-banner-btn" id="android-banner-btn" href="https://play.google.com/store/apps/details?id=com.stellasecret.tripmind" target="_blank" rel="noopener noreferrer">Installer</a>
+    <button class="android-banner-close" id="android-banner-close" aria-label="Fermer">✕</button>
+  </div>
+</div>
 
 <!-- FOOTER -->
 <footer>
@@ -1020,6 +1159,7 @@ footer {
   </div>
   <div class="footer-links">
     <a href="https://github.com/StellaSecret/TripMind" target="_blank">GitHub</a>
+    <a href="https://play.google.com/store/apps/details?id=com.stellasecret.tripmind" target="_blank" rel="noopener noreferrer">Google Play</a>
     <a href="https://stellasecret.github.io/privacy-pages/tripmind/privacy.html" id="footer-privacy" target="_blank">Confidentialité</a>
   </div>
 </footer>
@@ -1039,6 +1179,21 @@ footer {
     var hasHash = window.location.hash && window.location.hash.length > 1;
     if (isMobile || hasHash) {
       document.getElementById('loading-overlay').style.display = 'flex';
+    }
+
+    // Android install banner — web only (not Capacitor/localhost), Android UA, not dismissed
+    var inApp = window.location.origin.includes('localhost');
+    var isAndroidUA = /Android/i.test(navigator.userAgent);
+    var bannerDismissed = false;
+    try { bannerDismissed = localStorage.getItem('tripmind-android-banner') === '1'; } catch(e) {}
+    var banner = document.getElementById('android-banner');
+    if (banner && !inApp && isAndroidUA && !bannerDismissed) {
+      requestAnimationFrame(function() { banner.classList.add('show'); });
+      var bannerClose = document.getElementById('android-banner-close');
+      if (bannerClose) bannerClose.addEventListener('click', function() {
+        banner.classList.remove('show');
+        try { localStorage.setItem('tripmind-android-banner', '1'); } catch(e) {}
+      });
     }
 
     // Scroll reveal
