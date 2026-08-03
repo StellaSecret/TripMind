@@ -13,7 +13,7 @@
     "test:new": "npx --no playwright test --grep-invert \"@live\" --project=chromium tests/09-time-picker.spec.ts tests/10-analysis-cache.spec.ts tests/11-lang-rerender.spec.ts tests/12-station-picker.spec.ts tests/13-url-share.spec.ts tests/14-tab-cache.spec.ts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "^1.62.1",
     "husky": "^9.0.0",
     "serve": "^14.2.4"
   }
