@@ -3,6 +3,8 @@ name: CI/CD TripMind
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     - cron: '0 2 9 * *'  # Every 9th of the month at 02:00 UTC — runs @live Playwright tests
   workflow_dispatch:
@@ -211,6 +213,7 @@ jobs:
   deploy-pages:
     name: Deploy to GitHub Pages
     needs: [unit-tests, playwright-tests]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -232,6 +235,8 @@ jobs:
     name: Build AAB & APK
     needs: [unit-tests, playwright-tests]
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event_name == 'pull_request' && 'build-review' || 'build' }}
     outputs:
       artifact-name: artifacts-${{ github.run_number }}
     steps:
@@ -293,6 +298,7 @@ jobs:
   # Sans le tag, le job est skippé même si l'environment n'est pas configuré.
   release:
     name: Create Release
+    if: github.ref == 'refs/heads/main'
     needs: build-android
     runs-on: ubuntu-latest
     environment: release        # ← pause ici jusqu'à approbation manuelle
