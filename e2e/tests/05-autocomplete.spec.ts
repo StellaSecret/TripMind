@@ -70,7 +70,10 @@ test.describe('Autocomplete — BAN @live', () => {
   test('blurring origin closes list @live', async ({ page }) => {
     await page.locator(SEL.origInput).fill('Stras');
     await expect(page.locator(SEL.origAc)).toHaveClass(/visible/, { timeout: 6_000 });
-    await page.locator(SEL.destInput).click(); // blur origin
+    // Tab moves focus away from origin → blur fires → list closes. (Clicking dest
+    // is unreliable here: the open dropdown can physically cover it, so Playwright
+    // would never deliver the click and the blur never fires.)
+    await page.locator(SEL.origInput).press('Tab');
     await page.waitForTimeout(400);
     await expect(page.locator(SEL.origAc)).not.toHaveClass(/visible/);
   });

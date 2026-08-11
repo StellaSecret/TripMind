@@ -113,6 +113,7 @@
       /* Trains tab */
       trainsLoading: 'Chargement des trains…',
       trainsOverloadNote: 'Transitous est un service communautaire bénévole à ressources limitées. Les 500/504 indiquent une surcharge temporaire — les données de trains seront disponibles dans quelques minutes.',
+      trainsTimeoutMsg: 'Transitous ne répond pas à temps — service probablement surchargé. Les trains s\'affichent dès qu\'il est de nouveau disponible.',
       trainsErrNote: 'En cas de panne persistante, consultez directement SNCF Connect.',
       trainsEmpty: function(off, label, hhmm) { return 'Aucun trajet en transport commun trouvé'+(off>0?' pour le '+label+' à partir de '+(hhmm||'08:00'):'')+". Cette liaison n'est peut-être pas desservie par train direct."; },
       trainsFuture: function(label, hhmm) { return '📅 Trains du '+label+' à partir de '+(hhmm||'08:00'); },
@@ -270,6 +271,7 @@
       /* Trains tab */
       trainsLoading: 'Loading trains…',
       trainsOverloadNote: 'Transitous is a volunteer community service with limited resources. 500/504 errors indicate temporary overload — train data will be available in a few minutes.',
+      trainsTimeoutMsg: 'Transitous is not responding in time — service may be overloaded. Trains appear as soon as it is available again.',
       trainsErrNote: 'If the issue persists, check SNCF Connect directly.',
       trainsEmpty: function(off, label, hhmm) { return 'No public transport connection found'+(off>0?' for '+label+' from '+(hhmm||'08:00'):'')+'. This route may not be served by a direct train.'; },
       trainsFuture: function(label, hhmm) { return '📅 Trains on '+label+' from '+(hhmm||'08:00'); },
@@ -1226,6 +1228,12 @@
       } else if (e.key === 'Escape') { closeList(); hideStations(); }
     });
     inp.addEventListener('blur', function() {
+      // Abort any in-flight autocomplete + pending debounce: a late response
+      // (slow Nominatim/Transitous) must NOT re-open the dropdown after focus
+      // left — the stale overlay would sit above the sibling inputs and block
+      // their clicks.
+      if (acAborts[inputId]) { acAborts[inputId].abort(); acAborts[inputId] = null; }
+      clearTimeout(acTimers[inputId]);
       setTimeout(function() {
         closeList();
         // Only hide station picker if focus moved outside both input and picker
@@ -1245,9 +1253,10 @@
 
   /* ─── API : Géocodage BAN + Nominatim (monde) ───── */
   function geocodeBAN(city) {
-    // 1. Try BAN (France) — best accuracy for French cities & train stations
-    return rateLimitedFetch('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(city) +
-                 '&type=municipality&limit=1&autocomplete=1')
+    // 1. Try BAN (France) — best accuracy for French cities & train stations.
+    // Timeout 6s : si BAN ne répond pas, l'analyse échoue proprement (pas de blocage).
+    return fetchWithTimeout('https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(city) +
+                 '&type=municipality&limit=1&autocomplete=1', {}, 6000)
       .then(function(r) { if (!r.ok) throw new Error('BAN HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         if (d.features && d.features.length) {
@@ -1298,7 +1307,7 @@
   function geocodeTransitous(city) {
     var url = 'https://api.transitous.org/api/v1/geocode?text=' +
               encodeURIComponent(city) + '&size=5';
-    return fetch(url, { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind', 'User-Agent': TRANSITOUS_UA } })
+    return fetchWithTimeout(url, { headers: { 'Referer': 'https://github.com/StellaSecret/TripMind', 'User-Agent': TRANSITOUS_UA } }, 8000)
       .then(function(r) { if (!r.ok) throw new Error('Transitous geocode HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         if (!d || !d.length) throw new Error('"' + city + '" introuvable via Transitous');
@@ -1320,7 +1329,7 @@
       '&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,weather_code,wind_speed_10m_max' +
       '&timezone=auto&forecast_days=16';
 
-    return fetch(url)
+    return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error((LANG==='en'?'Weather HTTP ':'Météo HTTP ') + r.status); return r.json(); })
       .then(function(d) {
         var dy = d.daily;
@@ -1378,7 +1387,7 @@
       '&hourly=' + aqiVar + ',pm2_5,pm10,nitrogen_dioxide,ozone' + pollenVars +
       '&timezone=auto&forecast_days=' + forecastDays;
 
-    return fetch(url)
+    return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error('AQI HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         var h = d.hourly;
@@ -1454,7 +1463,7 @@
   function fetchRoute(oLat, oLon, dLat, dLon) {
     var url = 'https://router.project-osrm.org/route/v1/driving/' +
               oLon + ',' + oLat + ';' + dLon + ',' + dLat + '?overview=false&annotations=false';
-    return fetch(url)
+    return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error('OSRM HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         if (!d.routes || !d.routes.length) throw new Error(LANG==='en'?'No route found':'Aucun itinéraire trouvé');
@@ -1496,12 +1505,50 @@
   var TRANSITOUS_UA = 'TripMind/1.0 (https://github.com/StellaSecret/TripMind; mailto:thaikhuevincent.nguyen@gmail.com)';
   var TRANSITOUS_TIMEOUT_MS = 12000; // 12s — au-delà Transitous est probablement surchargé
 
+  // Timeouts bornant chaque étape du pipeline d'analyse (@live tests, réseau mobile instable).
+  // Garantissent que le tableau de bord s'affiche toujours, même si un service tiers ne répond pas.
+  var GEOCODE_TIMEOUT_MS = 13000; // BAN (6s) + fallback Nominatim (5s)
+  var STEP_TIMEOUT_MS    = 10000; // météo / qualité d'air / itinéraire
+  var TRAINS_TIMEOUT_MS  = 14000; // Transitous (1er essai 12s + retry) — coupé au besoin
+
   /* Fetch avec timeout via AbortController */
   function fetchWithTimeout(url, opts, timeoutMs) {
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var timer = ctrl ? setTimeout(function() { ctrl.abort(); }, timeoutMs) : null;
     var fetchOpts = ctrl ? Object.assign({}, opts, { signal: ctrl.signal }) : opts;
     return fetch(url, fetchOpts).finally(function() { if (timer) clearTimeout(timer); });
+  }
+
+  /* Résout une promesse au plus vite entre son résultat et le délai :
+   * si le délai expire, rend fallback() (l'analyse continue avec les valeurs de repli). */
+  function settleStep(promise, ms, fallback) {
+    return new Promise(function(resolve) {
+      var done = false;
+      var timer = setTimeout(function() {
+        if (!done) { done = true; resolve(fallback()); }
+      }, ms);
+      promise.then(function(v) {
+        if (!done) { done = true; clearTimeout(timer); resolve(v); }
+      }, function() {
+        if (!done) { done = true; clearTimeout(timer); resolve(fallback()); }
+      });
+    });
+  }
+
+  /* Comme settleStep mais rejette au lieu de replier — utilisé pour le géocodage,
+   * qui ne doit jamais se poursuivre sans coordonnées. */
+  function hardTimeout(promise, ms, errMsg) {
+    return new Promise(function(resolve, reject) {
+      var done = false;
+      var timer = setTimeout(function() {
+        if (!done) { done = true; reject(new Error(errMsg)); }
+      }, ms);
+      promise.then(function(v) {
+        if (!done) { done = true; clearTimeout(timer); resolve(v); }
+      }, function(e) {
+        if (!done) { done = true; clearTimeout(timer); reject(e); }
+      });
+    });
   }
 
   /* Convertit un string ISO 8601 UTC "2026-04-28T20:38:00Z" en "HH:MM" heure locale */
@@ -2599,6 +2646,17 @@
         });
     }
 
+    function defaultMeteo() {
+      return { temp:15, feels:13, humidity:null, wind:10, code:3,
+               clouds:null, tmax:18, tmin:10, precipProb:30, uv:3,
+               isForecast: dayOffset() > 0 };
+    }
+
+    function defaultAirQuality() {
+      return { aqi:null, pm25:null, pm10:null, o3:null, no2:null,
+               pollens:{}, polMax:0, polActifs:[], polNiveau:{l:'—',c:'bb'} };
+    }
+
     function stepMeteo(ctx) {
       setStep('s1', 'loading');
       $('lmsg').textContent = t('loadingMeteo');
@@ -2606,9 +2664,7 @@
         .then(function(m) { setStep('s1', 'done'); ctx.m = m; return ctx; })
         .catch(function() {
           setStep('s1', 'fail');
-          ctx.m = { temp:15, feels:13, humidity:null, wind:10, code:3,
-                    clouds:null, tmax:18, tmin:10, precipProb:30, uv:3,
-                    isForecast: dayOffset() > 0 };
+          ctx.m = defaultMeteo();
           return ctx;
         });
     }
@@ -2620,8 +2676,7 @@
         .then(function(aq) { setStep('s2', 'done'); setStep('s3', 'done'); ctx.aq = aq; return ctx; })
         .catch(function() {
           setStep('s2', 'fail'); setStep('s3', 'fail');
-          ctx.aq = { aqi:null, pm25:null, pm10:null, o3:null, no2:null,
-                     pollens:{}, polMax:0, polActifs:[], polNiveau:{l:'—',c:'bb'} };
+          ctx.aq = defaultAirQuality();
           return ctx;
         });
     }
@@ -2697,13 +2752,13 @@
     }
 
     setStep('s0', 'loading');
-    stepGeocode()
+    hardTimeout(stepGeocode(), GEOCODE_TIMEOUT_MS, 'geocode-timeout')
       .then(function(ctx) {
         return Promise.all([
-          stepMeteo(ctx),
-          stepAirQuality(ctx),
-          stepRoute(ctx),
-          stepTrains(ctx)
+          settleStep(stepMeteo(ctx),      STEP_TIMEOUT_MS, function() { ctx.m  = defaultMeteo(); return ctx; }),
+          settleStep(stepAirQuality(ctx), STEP_TIMEOUT_MS, function() { ctx.aq = defaultAirQuality(); return ctx; }),
+          settleStep(stepRoute(ctx),      STEP_TIMEOUT_MS, function() { ctx.rt = null; return ctx; }),
+          settleStep(stepTrains(ctx),     TRAINS_TIMEOUT_MS, function() { ctx.trains = { _err: t('trainsTimeoutMsg'), trains: [] }; return ctx; })
         ]).then(function() { return ctx; });
       })
       .then(function(ctx) { return new Promise(function(r) { setTimeout(function() { r(ctx); }, 300); }); })
