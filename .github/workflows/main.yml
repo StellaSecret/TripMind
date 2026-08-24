@@ -239,6 +239,14 @@ jobs:
       name: ${{ github.event_name == 'pull_request' && 'build-review' || 'build' }}
     outputs:
       artifact-name: artifacts-${{ github.run_number }}
+    env:
+      # GitHub Actions does not expose repository secrets to workflow runs triggered
+      # by Dependabot or by pull requests from forks. Trying to sign with an empty
+      # KEYSTORE_BASE64 produces a 0-byte "keystore" and Gradle fails with a
+      # confusing "Tag number over 30 is not supported" error. So on those runs we
+      # skip signing entirely and build an unsigned debug APK/AAB just to confirm
+      # the app still compiles.
+      HAS_SIGNING_SECRETS: ${{ github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -256,10 +264,12 @@ jobs:
           npx cap sync android
 
       - name: Decode keystore
+        if: env.HAS_SIGNING_SECRETS == 'true'
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/tripmind-release.jks
 
-      - name: Build Android App
+      - name: Build signed Android App (release)
+        if: env.HAS_SIGNING_SECRETS == 'true'
         run: |
           cd android
           chmod +x gradlew
@@ -270,15 +280,29 @@ jobs:
             -Pandroid.injected.signing.store.password="${{ secrets.STORE_PASSWORD }}" \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password="${{ secrets.KEY_PASSWORD }}"
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
-      - name: Collect artifacts
+      - name: Build unsigned Android App (no repo secrets on this run)
+        if: env.HAS_SIGNING_SECRETS != 'true'
+        run: |
+          cd android
+          chmod +x gradlew
+          VCODE=$(date -u +%Y%m%d)$(printf '%02d' $(( ${{ github.run_number }} % 100 )))
+          ./gradlew bundleDebug assembleDebug --no-daemon -PversionCode=$VCODE
+
+      - name: Collect artifacts (signed release)
+        if: env.HAS_SIGNING_SECRETS == 'true'
         run: |
           mkdir -p dist
           cp android/app/build/outputs/bundle/release/app-release.aab dist/tripmind-${{ github.run_number }}.aab
           cp android/app/build/outputs/apk/release/app-release.apk dist/tripmind-${{ github.run_number }}.apk
           cp android/app/build/outputs/mapping/release/mapping.txt dist/mapping-${{ github.run_number }}.txt
+
+      - name: Collect artifacts (unsigned debug — build validation only)
+        if: env.HAS_SIGNING_SECRETS != 'true'
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/bundle/debug/app-debug.aab dist/tripmind-${{ github.run_number }}-debug.aab
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/tripmind-${{ github.run_number }}-debug.apk
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
