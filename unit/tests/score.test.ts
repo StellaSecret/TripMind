@@ -57,6 +57,55 @@ describe('calcScore — temperature penalties', () => {
   });
 });
 
+describe('calcScore — exact threshold boundaries (strict > vs >=)', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+  const clearWeather = { code: 0, temp: 20 };
+
+  it('temp 0°C → uncomfortable (-5), not extreme', () => {
+    expect(calcScore({ code: 0, temp: 0 }, clearAQ)).toBe(95);
+  });
+
+  it('temp 37°C → uncomfortable (-5), not extreme', () => {
+    expect(calcScore({ code: 0, temp: 37 }, clearAQ)).toBe(95);
+  });
+
+  it('temp 5°C → no penalty', () => {
+    expect(calcScore({ code: 0, temp: 5 }, clearAQ)).toBe(100);
+  });
+
+  it('temp 33°C → no penalty', () => {
+    expect(calcScore({ code: 0, temp: 33 }, clearAQ)).toBe(100);
+  });
+
+  it('AQI 100 → poor (-15), not very poor', () => {
+    expect(calcScore(clearWeather, { aqi: 100, polMax: 0 })).toBe(85);
+  });
+
+  it('AQI 80 → moderate (-8), not poor', () => {
+    expect(calcScore(clearWeather, { aqi: 80, polMax: 0 })).toBe(92);
+  });
+
+  it('AQI 60 → fair (-3), not moderate', () => {
+    expect(calcScore(clearWeather, { aqi: 60, polMax: 0 })).toBe(97);
+  });
+
+  it('AQI 40 → no penalty', () => {
+    expect(calcScore(clearWeather, { aqi: 40, polMax: 0 })).toBe(100);
+  });
+
+  it('polMax 200 → high (-7), not very high', () => {
+    expect(calcScore(clearWeather, { aqi: 0, polMax: 200 })).toBe(93);
+  });
+
+  it('polMax 50 → moderate (-3), not high', () => {
+    expect(calcScore(clearWeather, { aqi: 0, polMax: 50 })).toBe(97);
+  });
+
+  it('polMax 10 → no penalty', () => {
+    expect(calcScore(clearWeather, { aqi: 0, polMax: 10 })).toBe(100);
+  });
+});
+
 describe('calcScore — AQI penalties', () => {
   const clearWeather = { code: 0, temp: 20 };
 

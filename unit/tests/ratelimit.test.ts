@@ -81,6 +81,25 @@ describe('Rate limiter — queuing', () => {
     await Promise.all([p1, p2]);
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('strictly enforces minGapMs between successive calls', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok'));
+    const rl = createRateLimiter({ [NOMINATIM]: { minGapMs: 1000 } }, mockFetch);
+
+    // First call fires immediately (fresh limiter), recording lastCall ≈ t0
+    const p1 = rl(`https://${NOMINATIM}/a`);
+    await vi.advanceTimersByTimeAsync(0);
+    await p1;
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Second call is queued and must not fire until 1000ms have passed
+    const p2 = rl(`https://${NOMINATIM}/b`);
+    await vi.advanceTimersByTimeAsync(900);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(150); // gap fully elapsed
+    await p2;
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('Rate limiter — error handling', () => {
