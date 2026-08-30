@@ -51,6 +51,18 @@ describe('carCost', () => {
     const r = carCost(300);
     expect(r.total).toBe(r.fuel + r.toll);
   });
+
+  it('exact toll threshold: 80km → no toll (strict >)', () => {
+    expect(carCost(80).toll).toBe(0);
+  });
+
+  it('exact toll formula: 200km → round(200 × 0.09) = 18', () => {
+    expect(carCost(200).toll).toBe(18);
+  });
+
+  it('exact CO2 formula: 200km → round(128 × 200 / 1000) = 26', () => {
+    expect(carCost(200).co2kg).toBe(26);
+  });
 });
 
 describe('trainCost', () => {
@@ -167,5 +179,13 @@ describe('carpoolCost', () => {
   it('cost is less than solo car fuel', () => {
     const dist = 300;
     expect(carpoolCost(dist).eur).toBeLessThan(carCost(dist).fuel);
+  });
+
+  it('CO2 is positive', () => {
+    expect(carpoolCost(300).co2kg).toBeGreaterThan(0);
+  });
+
+  it('exact CO2 formula: 300km → 51 × 300 / 1000 = 15.3', () => {
+    expect(carpoolCost(300).co2kg).toBe(15.3);
   });
 });

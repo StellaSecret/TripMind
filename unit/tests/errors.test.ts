@@ -8,18 +8,14 @@ const e = (msg: string, name?: string): Error => {
 };
 
 describe('classifyError — city not found', () => {
-  it('FR: introuvable message', () => {
-    const msg = classifyError(e('"Lyon" introuvable'), 'Lyon', 'fr');
-    expect(msg).toContain('🔍');
-    expect(msg).toContain('Lyon');
-    expect(msg).toContain('pays');
+  it('FR: introuvable message (exact)', () => {
+    expect(classifyError(e('"Lyon" introuvable'), 'Lyon', 'fr'))
+      .toBe('🔍 Ville introuvable : "Lyon". Essayez d\'ajouter le pays (ex: "Paris, France").');
   });
 
-  it('EN: not found message', () => {
-    const msg = classifyError(e('"London" not found'), 'London', 'en');
-    expect(msg).toContain('🔍');
-    expect(msg).toContain('London');
-    expect(msg).toContain('country');
+  it('EN: not found message (exact)', () => {
+    expect(classifyError(e('"London" not found'), 'London', 'en'))
+      .toBe('🔍 City not found: "London". Try adding the country (e.g. "Paris, France").');
   });
 
   it('includes the context city name', () => {
@@ -29,16 +25,14 @@ describe('classifyError — city not found', () => {
 });
 
 describe('classifyError — HTTP 5xx', () => {
-  it('FR: server error', () => {
-    const msg = classifyError(e('Open-Meteo HTTP 500'), '', 'fr');
-    expect(msg).toContain('⚙️');
-    expect(msg).toContain('indisponible');
+  it('FR: server error (exact)', () => {
+    expect(classifyError(e('Open-Meteo HTTP 500'), '', 'fr'))
+      .toBe('⚙️ Un service de données est temporairement indisponible. Réessayez dans un instant.');
   });
 
-  it('EN: server error', () => {
-    const msg = classifyError(e('BAN HTTP 503'), '', 'en');
-    expect(msg).toContain('⚙️');
-    expect(msg).toContain('unavailable');
+  it('EN: server error (exact)', () => {
+    expect(classifyError(e('BAN HTTP 503'), '', 'en'))
+      .toBe('⚙️ A data service is temporarily unavailable. Please try again in a moment.');
   });
 
   it('matches 502, 503, 504', () => {
@@ -47,64 +41,78 @@ describe('classifyError — HTTP 5xx', () => {
       expect(msg).toContain('⚙️');
     }
   });
+
+  it('defaults to French when lang is omitted', () => {
+    expect(classifyError(e('HTTP 500'), ''))
+      .toBe('⚙️ Un service de données est temporairement indisponible. Réessayez dans un instant.');
+  });
 });
 
 describe('classifyError — HTTP 4xx', () => {
-  it('FR: shows HTTP code', () => {
-    const msg = classifyError(e('BAN HTTP 401'), '', 'fr');
-    expect(msg).toContain('🔒');
-    expect(msg).toContain('401');
+  it('FR: shows HTTP code (exact)', () => {
+    expect(classifyError(e('BAN HTTP 401'), '', 'fr'))
+      .toBe('🔒 Accès refusé par un service de données (HTTP 401).');
   });
 
-  it('EN: shows HTTP code', () => {
-    const msg = classifyError(e('API HTTP 403'), '', 'en');
-    expect(msg).toContain('🔒');
-    expect(msg).toContain('403');
+  it('EN: shows HTTP code (exact)', () => {
+    expect(classifyError(e('API HTTP 403'), '', 'en'))
+      .toBe('🔒 Access denied by a data service (HTTP 403).');
   });
 });
 
 describe('classifyError — timeout / abort', () => {
-  it('FR: timeout message', () => {
-    const msg = classifyError(e('Request timeout'), '', 'fr');
-    expect(msg).toContain('⏱');
-    expect(msg).toContain('surchargé');
+  it('FR: timeout message (exact)', () => {
+    expect(classifyError(e('Request timeout'), '', 'fr'))
+      .toBe('⏱ La requête a expiré. Le service est peut-être surchargé — réessayez.');
   });
 
-  it('EN: AbortError name', () => {
-    const msg = classifyError(e('The operation was aborted', 'AbortError'), '', 'en');
-    expect(msg).toContain('⏱');
-    expect(msg).toContain('overloaded');
+  it('EN: AbortError name (exact)', () => {
+    expect(classifyError(e('The operation was aborted', 'AbortError'), '', 'en'))
+      .toBe('⏱ Request timed out. The service may be overloaded — try again.');
   });
 });
 
 describe('classifyError — network error', () => {
-  it('FR: Failed to fetch', () => {
-    const msg = classifyError(e('Failed to fetch'), '', 'fr');
-    expect(msg).toContain('🌐');
-    expect(msg).toContain('réseau');
+  it('FR: Failed to fetch (exact)', () => {
+    expect(classifyError(e('Failed to fetch'), '', 'fr'))
+      .toBe('🌐 Erreur réseau. Vérifiez votre connexion ou désactivez un VPN/proxy.');
   });
 
-  it('EN: NetworkError', () => {
-    const msg = classifyError(e('NetworkError when attempting to fetch'), '', 'en');
-    expect(msg).toContain('🌐');
-    expect(msg).toContain('Network');
+  it('EN: NetworkError (exact)', () => {
+    expect(classifyError(e('NetworkError when attempting to fetch'), '', 'en'))
+      .toBe('🌐 Network error. Check your connection or try disabling a VPN/proxy.');
+  });
+
+  it('FR: plain "fetch" mention alone still hits the network branch', () => {
+    expect(classifyError(e('fetch aborted'), '', 'fr'))
+      .toBe('🌐 Erreur réseau. Vérifiez votre connexion ou désactivez un VPN/proxy.');
+  });
+
+  it('FR: NetworkError without "fetch" mention still hits the network branch', () => {
+    expect(classifyError(e('NetworkError: connection refused'), '', 'fr'))
+      .toBe('🌐 Erreur réseau. Vérifiez votre connexion ou désactivez un VPN/proxy.');
   });
 });
 
 describe('classifyError — fallback', () => {
   it('returns cleaned raw message for unknown errors', () => {
-    const msg = classifyError(e('Something unexpected'), 'ctx', 'fr');
-    expect(msg).toBe('Something unexpected');
+    expect(classifyError(e('Something unexpected'), 'ctx', 'fr')).toBe('Something unexpected');
   });
 
   it('strips "Error: " prefix', () => {
-    const msg = classifyError(e('Error: Something bad'), 'ctx', 'en');
-    expect(msg).toBe('Something bad');
+    expect(classifyError(e('Error: Something bad'), 'ctx', 'en')).toBe('Something bad');
   });
 
-  it('handles null error gracefully', () => {
-    const msg = classifyError(null, 'ctx', 'en');
-    expect(typeof msg).toBe('string');
-    expect(msg.length).toBeGreaterThan(0);
+  it('strips "Error:" only at the start of the message', () => {
+    expect(classifyError(e('boom Error: oops'), 'ctx', 'en')).toBe('boom Error: oops');
+  });
+
+  it('strips all whitespace after "Error:"', () => {
+    expect(classifyError(e('Error:    lots of spaces'), 'ctx', 'en')).toBe('lots of spaces');
+  });
+
+  it('handles null error with an exact fallback message', () => {
+    expect(classifyError(null, 'ctx', 'en')).toBe('Unexpected error.');
+    expect(classifyError(null, 'ctx', 'fr')).toBe('Erreur inattendue.');
   });
 });

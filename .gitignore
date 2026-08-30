@@ -37,3 +37,7 @@ secrets.json
 # ── Tests ─────────────────────────────────────────────
 playwright-report/
 test-results/
+
+# ── Mutation testing (Stryker) ────────────────────────
+unit/reports/
+unit/.stryker-tmp/
