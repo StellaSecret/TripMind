@@ -92,9 +92,29 @@ stationTest.describe('Autocomplete — station direct search', () => {
     { type: 'STOP', name: 'Paris-Gare-de-Lyon', lat: 48.8448, lon: 2.3735, country: 'FR', areas: [] },
   ];
 
-  stationTest('typing a station name shows stop suggestions in dropdown', async ({ page }) => {
+  // A single mocked BAN city feature, so `renderList`'s hasCity check is true and the
+  // "Gares" separator (which only renders between city results and stop results) shows up —
+  // matching what a real BAN lookup for "paris aust" would plausibly return: a "Paris" match.
+  const MOCK_CITY_FEATURE = {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [2.3522, 48.8566] },
+    properties: { label: 'Paris', name: 'Paris', context: 'Paris, Île-de-France', type: 'municipality' }
+  };
+
+  // BAN and Nominatim are mocked too, not just Transitous — the app fires all three
+  // and only renders once every one of them has settled, so leaving the other two
+  // hitting the real network defeats the "no network required, runs in CI" intent
+  // of this suite and makes it flaky whenever that egress is slow/unavailable.
+  stationTest.beforeEach(async ({ page }) => {
+    await page.route(/api-adresse\.data\.gouv\.fr\/search/, r =>
+      r.fulfill({ json: { features: [MOCK_CITY_FEATURE] } }));
+    await page.route(/nominatim\.openstreetmap\.org\/search/, r =>
+      r.fulfill({ json: [] }));
     await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
       r.fulfill({ json: MOCK_STOPS }));
+  });
+
+  stationTest('typing a station name shows stop suggestions in dropdown', async ({ page }) => {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');
@@ -103,8 +123,6 @@ stationTest.describe('Autocomplete — station direct search', () => {
   });
 
   stationTest('stop items appear below a "Gares" separator', async ({ page }) => {
-    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
-      r.fulfill({ json: MOCK_STOPS }));
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');
@@ -114,11 +132,6 @@ stationTest.describe('Autocomplete — station direct search', () => {
   });
 
   stationTest('clicking a stop suggestion fills input and sets station coords', async ({ page }) => {
-    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
-      r.fulfill({ json: MOCK_STOPS }));
-    // Also mock BAN so no real network needed
-    await page.route(/api-adresse\.data\.gouv\.fr/, r =>
-      r.fulfill({ json: { features: [] } }));
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');
@@ -132,10 +145,6 @@ stationTest.describe('Autocomplete — station direct search', () => {
   });
 
   stationTest('selecting a stop directly skips the secondary station sub-picker', async ({ page }) => {
-    await page.route(/api\.transitous\.org\/api\/v1\/geocode/, r =>
-      r.fulfill({ json: MOCK_STOPS }));
-    await page.route(/api-adresse\.data\.gouv\.fr/, r =>
-      r.fulfill({ json: { features: [] } }));
     const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
     await page.goto(baseUrl + '/app.html');
     await page.locator(SEL.origInput).fill('paris aust');

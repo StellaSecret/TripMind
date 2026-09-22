@@ -1163,20 +1163,34 @@
 
         var banBase = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q) + '&autocomplete=1';
 
+        // Local 4s safety-net timeout for BAN calls, mirroring fetchNominatimAC's own
+        // internal timeout. Without this, a slow/unreachable BAN endpoint can stall the
+        // whole Promise.all below indefinitely, since only the *next* keystroke aborts it.
+        function withBanTimeout(p) {
+          return Promise.race([
+            p,
+            new Promise(function(resolve) { setTimeout(function() { resolve([]); }, 4000); })
+          ]);
+        }
+
         // Run BAN (municipality) and Nominatim in parallel
         // For short queries: municipality only (fast city lookup).
         // For longer queries that look like addresses (contain digits or spaces+words):
         // also fetch housenumber results so full addresses appear.
         var looksLikeAddress = q.length >= 5 && /\d/.test(q);
-        var banMunicipalityP = rateLimitedFetch(banBase + '&type=municipality&limit=4', { signal: signal })
-          .then(function(r) { return r.json(); })
-          .then(function(d) { return d.features || []; })
-          .catch(function() { return []; });
+        var banMunicipalityP = withBanTimeout(
+          rateLimitedFetch(banBase + '&type=municipality&limit=4', { signal: signal })
+            .then(function(r) { return r.json(); })
+            .then(function(d) { return d.features || []; })
+            .catch(function() { return []; })
+        );
         var banAddressP = looksLikeAddress
-          ? rateLimitedFetch(banBase + '&type=housenumber&limit=5', { signal: signal })
-              .then(function(r) { return r.json(); })
-              .then(function(d) { return d.features || []; })
-              .catch(function() { return []; })
+          ? withBanTimeout(
+              rateLimitedFetch(banBase + '&type=housenumber&limit=5', { signal: signal })
+                .then(function(r) { return r.json(); })
+                .then(function(d) { return d.features || []; })
+                .catch(function() { return []; })
+            )
           : Promise.resolve([]);
         var banP = Promise.all([banMunicipalityP, banAddressP]).then(function(r) {
           return r[0].concat(r[1]);
