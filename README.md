@@ -1,5 +1,5 @@
 # 🧭 TripMind
-
+test
 **Assistant de déplacement intelligent pour la France**  
 Application Android (Capacitor) · 100% APIs publiques · Aucun token requis
 
