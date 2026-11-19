@@ -88,12 +88,36 @@ describe('calcScore — precipitation probability', () => {
     expect(calcScore({ code: 2, temp: 20, precipProb: 0, clouds: 80 }, clearAQ)).toBe(97);
   });
 
-  it('79% cloud with code 2 stays clear', () => {
-    expect(calcScore({ code: 2, temp: 20, precipProb: 0, clouds: 79 }, clearAQ)).toBe(100);
+  it('79% cloud with code 2 counts as cloudy (-3)', () => {
+    expect(calcScore({ code: 2, temp: 20, precipProb: 0, clouds: 79 }, clearAQ)).toBe(97);
   });
 
   it('missing weather code is treated as cloudy, not clear', () => {
     expect(calcScore({ code: null, temp: 20 }, clearAQ)).toBe(97);
+  });
+});
+
+describe('calcScore — cloud cover penalties', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('49% cloud → no penalty', () => {
+    expect(calcScore({ code: 0, temp: 20, clouds: 49 }, clearAQ)).toBe(100);
+  });
+
+  it('50% cloud → partly (-1)', () => {
+    expect(calcScore({ code: 0, temp: 20, clouds: 50 }, clearAQ)).toBe(99);
+  });
+
+  it('70% cloud → cloudy (-3)', () => {
+    expect(calcScore({ code: 0, temp: 20, clouds: 70 }, clearAQ)).toBe(97);
+  });
+
+  it('90% cloud → overcast (-5)', () => {
+    expect(calcScore({ code: 0, temp: 20, clouds: 90 }, clearAQ)).toBe(95);
+  });
+
+  it('clouds and WMO code use the worse penalty, not a sum', () => {
+    expect(calcScore({ code: 3, temp: 20, clouds: 90 }, clearAQ)).toBe(95);
   });
 });
 
@@ -306,6 +330,43 @@ describe('calcScore — AQI penalties', () => {
   });
 });
 
+describe('calcScore — individual pollutant penalties', () => {
+  const clearWeather = { code: 0, temp: 20 };
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('PM2.5 10 → low (-2)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, pm25: 10 })).toBe(98);
+  });
+
+  it('PM2.5 15 → medium (-4)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, pm25: 15 })).toBe(96);
+  });
+
+  it('PM2.5 25 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, pm25: 25 })).toBe(92);
+  });
+
+  it('PM10 50 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, pm10: 50 })).toBe(92);
+  });
+
+  it('NO2 40 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, no2: 40 })).toBe(92);
+  });
+
+  it('O3 120 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, o3: 120 })).toBe(92);
+  });
+
+  it('AQI and pollutant use the worse penalty, not a sum', () => {
+    expect(calcScore(clearWeather, { aqi: 150, polMax: 0, pm25: 50 })).toBe(75);
+  });
+
+  it('missing pollutant values add no penalty', () => {
+    expect(calcScore(clearWeather, clearAQ)).toBe(100);
+  });
+});
+
 describe('calcScore — pollen penalties', () => {
   const clearWeather = { code: 0, temp: 20 };
 
@@ -391,11 +452,13 @@ describe('SCORE_WEIGHTS — structure', () => {
   it('all penalty groups exist', () => {
     expect(SCORE_WEIGHTS.wmo).toBeDefined();
     expect(SCORE_WEIGHTS.precip).toBeDefined();
+    expect(SCORE_WEIGHTS.cloud).toBeDefined();
     expect(SCORE_WEIGHTS.temp).toBeDefined();
     expect(SCORE_WEIGHTS.wind).toBeDefined();
     expect(SCORE_WEIGHTS.uv).toBeDefined();
     expect(SCORE_WEIGHTS.humidity).toBeDefined();
     expect(SCORE_WEIGHTS.aqi).toBeDefined();
+    expect(SCORE_WEIGHTS.pollutant).toBeDefined();
     expect(SCORE_WEIGHTS.pollen).toBeDefined();
   });
 
@@ -410,14 +473,15 @@ describe('SCORE_WEIGHTS — structure', () => {
 
   it('worst case total deductions ≤ 95 (score never below 5)', () => {
     const w = SCORE_WEIGHTS;
-    const maxWeather = Math.max(w.wmo.storm, w.precip.veryHigh);
+    const maxWeather = Math.max(w.wmo.storm, w.precip.veryHigh, w.cloud.overcast);
+    const maxAir = Math.max(w.aqi.veryPoor, w.pollutant.high);
     const maxDeduction =
       maxWeather +
       w.temp.extreme +
       w.wind.severe +
       w.uv.extreme +
       w.humidity.veryHigh +
-      w.aqi.veryPoor +
+      maxAir +
       w.pollen.veryHigh;
     expect(maxDeduction).toBeLessThanOrEqual(95);
   });

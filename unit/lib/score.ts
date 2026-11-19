@@ -4,14 +4,16 @@
  */
 
 export const SCORE_WEIGHTS = {
-  wmo:      { storm: 25, freezing: 22, heavyRain: 18, snow: 15, rain: 12, drizzle: 7, fog: 5, cloudy: 3 },
-  precip:   { veryHigh: 30, high: 18, moderate: 8, low: 3 },
-  temp:     { extreme: 10, uncomfortable: 5 },
-  wind:     { severe: 8, strong: 5, moderate: 2 },
-  uv:       { extreme: 6, veryHigh: 4, high: 2 },
-  humidity: { veryHigh: 3, high: 2 },
-  aqi:      { veryPoor: 25, poor: 15, moderate: 8, fair: 3 },
-  pollen:   { veryHigh: 12, high: 7, moderate: 3 },
+  wmo:       { storm: 25, freezing: 22, heavyRain: 18, snow: 15, rain: 12, drizzle: 7, fog: 5, cloudy: 3 },
+  precip:    { veryHigh: 30, high: 18, moderate: 8, low: 3 },
+  cloud:     { overcast: 5, cloudy: 3, partly: 1 },
+  temp:      { extreme: 10, uncomfortable: 5 },
+  wind:      { severe: 8, strong: 5, moderate: 2 },
+  uv:        { extreme: 6, veryHigh: 4, high: 2 },
+  humidity:  { veryHigh: 3, high: 2 },
+  aqi:       { veryPoor: 25, poor: 15, moderate: 8, fair: 3 },
+  pollutant: { high: 8, medium: 4, low: 2 },
+  pollen:    { veryHigh: 12, high: 7, moderate: 3 },
 };
 
 export interface WeatherInput {
@@ -30,6 +32,10 @@ export interface WeatherInput {
 export interface AirInput {
   aqi: number | null;
   polMax: number;
+  pm25?: number | null;
+  pm10?: number | null;
+  no2?: number | null;
+  o3?: number | null;
 }
 
 export function calcScore(m: WeatherInput, aq: AirInput): number {
@@ -60,10 +66,10 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
   else if (c >= 45) weatherPenalty = w.wmo.fog;
   else if (c >= 3)  weatherPenalty = w.wmo.cloudy;
 
-  // WMO codes 0–2 can still be heavily overcast.
-  if (cl !== null && cl >= 80 && weatherPenalty < w.wmo.cloudy) {
-    weatherPenalty = w.wmo.cloudy;
-  }
+  let cloudPenalty = 0;
+  if      (cl !== null && cl >= 90) cloudPenalty = w.cloud.overcast;
+  else if (cl !== null && cl >= 70) cloudPenalty = w.cloud.cloudy;
+  else if (cl !== null && cl >= 50) cloudPenalty = w.cloud.partly;
 
   let precipPenalty = 0;
   if      (pp !== null && pp >= 80) precipPenalty = w.precip.veryHigh;
@@ -71,7 +77,7 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
   else if (pp !== null && pp >= 40) precipPenalty = w.precip.moderate;
   else if (pp !== null && pp >= 20) precipPenalty = w.precip.low;
 
-  s -= Math.max(weatherPenalty, precipPenalty);
+  s -= Math.max(weatherPenalty, cloudPenalty, precipPenalty);
 
   // Temperature: use the worst of current, feels-like and daily extremes.
   const tempPenalty = (t: number | null): number => {
@@ -107,12 +113,29 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
     else if (hum >= 85) s -= w.humidity.high;
   }
 
-  // AQI
+  // Air quality: use the worse of AQI and individual pollutant thresholds.
   const a = aq.aqi ?? 0;
-  if      (a > 100) s -= w.aqi.veryPoor;
-  else if (a > 80)  s -= w.aqi.poor;
-  else if (a > 60)  s -= w.aqi.moderate;
-  else if (a > 40)  s -= w.aqi.fair;
+  let airPenalty = 0;
+  if      (a > 100) airPenalty = w.aqi.veryPoor;
+  else if (a > 80)  airPenalty = w.aqi.poor;
+  else if (a > 60)  airPenalty = w.aqi.moderate;
+  else if (a > 40)  airPenalty = w.aqi.fair;
+
+  const pollutantPenalty = (v: number | null | undefined, high: number, medium: number, low: number): number => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
+    if (v >= high) return w.pollutant.high;
+    if (v >= medium) return w.pollutant.medium;
+    if (v >= low) return w.pollutant.low;
+    return 0;
+  };
+  airPenalty = Math.max(
+    airPenalty,
+    pollutantPenalty(aq.pm25, 25, 15, 10),
+    pollutantPenalty(aq.pm10, 50, 30, 20),
+    pollutantPenalty(aq.no2, 40, 25, 15),
+    pollutantPenalty(aq.o3, 120, 100, 80)
+  );
+  s -= airPenalty;
 
   // Pollen
   const p = aq.polMax ?? 0;
