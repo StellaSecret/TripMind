@@ -88,9 +88,9 @@ jobs:
         working-directory: unit
         run: npm ci
 
-      - name: Run unit tests
+      - name: Run unit tests with coverage
         working-directory: unit
-        run: npm test
+        run: npm run test:coverage
 
       - name: Upload coverage report
         if: always()
