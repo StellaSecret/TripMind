@@ -3,7 +3,7 @@
  * No @live → runs in CI offline suite.
  */
 import { test, expect } from '@playwright/test';
-import { SEL, gotoSearch, mockGoodConditions, mockAverageConditions, mockBadConditions, runMockedAnalysis, clickTab } from './helpers';
+import { SEL, gotoSearch, mockGoodConditions, mockRainProbabilityOnly, mockAverageConditions, mockBadConditions, runMockedAnalysis, clickTab } from './helpers';
 
 // ── Score label thresholds ────────────────────────────────────────────────────
 
@@ -16,6 +16,11 @@ test.describe('Score calculation — three thresholds', () => {
 
   test('score 50–74 → "Conditions moyennes" (rain, UV=7, AQI=80)', async ({ page }) => {
     await runMockedAnalysis(page, mockAverageConditions);
+    await expect(page.locator(SEL.scoreLbl)).toHaveText('Conditions moyennes');
+  });
+
+  test('score 50–74 → "Conditions moyennes" (clear code, 83% precip, 82% cloud)', async ({ page }) => {
+    await runMockedAnalysis(page, mockRainProbabilityOnly);
     await expect(page.locator(SEL.scoreLbl)).toHaveText('Conditions moyennes');
   });
 

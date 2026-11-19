@@ -111,6 +111,23 @@ export async function mockGoodConditions(page: Page) {
   await page.route(/api\.transitous\.org/, route => route.fulfill({ json: TRAINS_EMPTY }));
 }
 
+/** Score 50–74 → "Conditions moyennes": clear code but 83% precipitation, 82% cloud */
+export async function mockRainProbabilityOnly(page: Page) {
+  await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Pp]aris/, banParis);
+  await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Ll]yon/, banLyon);
+  await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
+    route.fulfill({ json: {
+      current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 77, wind_speed_10m: 12, weather_code: 2, cloud_cover: 82 },
+      daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(83), weather_code: Array(16).fill(2), wind_speed_10m_max: Array(16).fill(15) }
+    }})
+  );
+  await page.route(/air-quality-api\.open-meteo\.com/, route =>
+    route.fulfill({ json: { hourly: { european_aqi: Array(48).fill(25), pm2_5: Array(48).fill(8.5), pm10: Array(48).fill(15.2), nitrogen_dioxide: Array(48).fill(12.1), ozone: Array(48).fill(65.3), alder_pollen: Array(48).fill(2), birch_pollen: Array(48).fill(5), grass_pollen: Array(48).fill(8), mugwort_pollen: Array(48).fill(0), olive_pollen: Array(48).fill(0) } }})
+  );
+  await page.route(/router\.project-osrm\.org/, route => route.fulfill({ json: OSRM_462 }));
+  await page.route(/api\.transitous\.org/, route => route.fulfill({ json: TRAINS_EMPTY }));
+}
+
 /** Score 50–74 → "Conditions moyennes": weather_code=61, UV=7, AQI=80 */
 export async function mockAverageConditions(page: Page) {
   await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Pp]aris/, banParis);

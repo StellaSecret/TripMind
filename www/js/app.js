@@ -1955,15 +1955,19 @@
   /* ─── Score ──────────────────────────────────────────────────────────────
    * Starts at 100. Each factor deducts points based on severity.
    * Weights rationale:
-   *   Weather (WMO code) : up to -25  — dominant factor, direct travel impact
+   *   Weather (WMO code) : up to -25  — direct travel impact
+   *   Precipitation prob.: up to -30  — rain risk even when current code is clear
    *   Temperature        : up to -10  — comfort, not safety
    *   Air quality (AQI)  : up to -25  — health risk, comparable to bad weather
    *   Pollen             : up to -12  — affects allergy sufferers
+   * Weather and precipitation use the worse penalty, not a sum.
    * Final score clamped [5, 100].
    * ─────────────────────────────────────────────────────────────────────── */
   var SCORE_WEIGHTS = {
     // WMO weather code penalties
     wmo:    { storm:25, heavyRain:18, rain:12, drizzle:7, fog:5, cloudy:3 },
+    // Precipitation probability penalties
+    precip: { veryHigh:30, high:18, moderate:8, low:3 },
     // Temperature (°C) comfort penalties
     temp:   { extreme:10, uncomfortable:5 },
     // European/US AQI penalties
@@ -1973,15 +1977,33 @@
   };
 
   function calcScore(m, aq) {
-    var s = 100, c = m.code, w = SCORE_WEIGHTS;
+    var s = 100, w = SCORE_WEIGHTS;
+    var c  = (typeof m.code === 'number' && isFinite(m.code)) ? m.code : null;
+    var pp = (typeof m.precipProb === 'number' && isFinite(m.precipProb)) ? m.precipProb : null;
+    var cl = (typeof m.clouds === 'number' && isFinite(m.clouds)) ? m.clouds : null;
 
-    // Weather
-    if      (c>=95) s -= w.wmo.storm;
-    else if (c>=80) s -= w.wmo.heavyRain;
-    else if (c>=61) s -= w.wmo.rain;
-    else if (c>=51) s -= w.wmo.drizzle;
-    else if (c>=45) s -= w.wmo.fog;
-    else if (c>=3)  s -= w.wmo.cloudy;
+    // Weather: use the worse of WMO condition and precipitation probability.
+    var weatherPenalty = 0;
+    if      (c === null) weatherPenalty = w.wmo.cloudy;
+    else if (c>=95) weatherPenalty = w.wmo.storm;
+    else if (c>=80) weatherPenalty = w.wmo.heavyRain;
+    else if (c>=61) weatherPenalty = w.wmo.rain;
+    else if (c>=51) weatherPenalty = w.wmo.drizzle;
+    else if (c>=45) weatherPenalty = w.wmo.fog;
+    else if (c>=3)  weatherPenalty = w.wmo.cloudy;
+
+    // WMO codes 0–2 can still be heavily overcast.
+    if (cl !== null && cl >= 80 && weatherPenalty < w.wmo.cloudy) {
+      weatherPenalty = w.wmo.cloudy;
+    }
+
+    var precipPenalty = 0;
+    if      (pp !== null && pp>=80) precipPenalty = w.precip.veryHigh;
+    else if (pp !== null && pp>=60) precipPenalty = w.precip.high;
+    else if (pp !== null && pp>=40) precipPenalty = w.precip.moderate;
+    else if (pp !== null && pp>=20) precipPenalty = w.precip.low;
+
+    s -= Math.max(weatherPenalty, precipPenalty);
 
     // Temperature comfort
     if      (m.temp < 0  || m.temp > 37) s -= w.temp.extreme;
