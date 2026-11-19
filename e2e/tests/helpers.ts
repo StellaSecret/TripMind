@@ -100,8 +100,8 @@ export async function mockGoodConditions(page: Page) {
   await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Ll]yon/, banLyon);
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
-      current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, wind_speed_10m: 12, weather_code: 0, cloud_cover: 10 },
-      daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(10), weather_code: Array(16).fill(0), wind_speed_10m_max: Array(16).fill(15) }
+      current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, wind_speed_10m: 12, wind_gusts_10m: 22, weather_code: 0, cloud_cover: 10, visibility: 12000 },
+      daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(10), weather_code: Array(16).fill(0), wind_speed_10m_max: Array(16).fill(15), wind_gusts_10m_max: Array(16).fill(25), precipitation_sum: Array(16).fill(0), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(12000), daylight_duration: Array(16).fill(28800) }
     }})
   );
   await page.route(/air-quality-api\.open-meteo\.com/, route =>
@@ -117,8 +117,8 @@ export async function mockRainProbabilityOnly(page: Page) {
   await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Ll]yon/, banLyon);
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
-      current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 77, wind_speed_10m: 12, weather_code: 2, cloud_cover: 82 },
-      daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(83), weather_code: Array(16).fill(2), wind_speed_10m_max: Array(16).fill(15) }
+      current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 77, wind_speed_10m: 12, wind_gusts_10m: 22, weather_code: 2, cloud_cover: 82, visibility: 9000 },
+      daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(83), weather_code: Array(16).fill(2), wind_speed_10m_max: Array(16).fill(15), wind_gusts_10m_max: Array(16).fill(25), precipitation_sum: Array(16).fill(4), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(9000), daylight_duration: Array(16).fill(28800) }
     }})
   );
   await page.route(/air-quality-api\.open-meteo\.com/, route =>
@@ -134,8 +134,8 @@ export async function mockAverageConditions(page: Page) {
   await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Ll]yon/, banLyon);
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
-      current: { temperature_2m: 14, apparent_temperature: 11, relative_humidity_2m: 80, wind_speed_10m: 30, weather_code: 61, cloud_cover: 90 },
-      daily: { temperature_2m_max: Array(16).fill(16), temperature_2m_min: Array(16).fill(10), uv_index_max: Array(16).fill(7), precipitation_probability_max: Array(16).fill(70), weather_code: Array(16).fill(61), wind_speed_10m_max: Array(16).fill(35) }
+      current: { temperature_2m: 14, apparent_temperature: 11, relative_humidity_2m: 80, wind_speed_10m: 30, wind_gusts_10m: 45, weather_code: 61, cloud_cover: 90, visibility: 6000 },
+      daily: { temperature_2m_max: Array(16).fill(16), temperature_2m_min: Array(16).fill(10), uv_index_max: Array(16).fill(7), precipitation_probability_max: Array(16).fill(70), weather_code: Array(16).fill(61), wind_speed_10m_max: Array(16).fill(35), wind_gusts_10m_max: Array(16).fill(50), precipitation_sum: Array(16).fill(6), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(6000), daylight_duration: Array(16).fill(28800) }
     }})
   );
   await page.route(/air-quality-api\.open-meteo\.com/, route =>
@@ -151,8 +151,8 @@ export async function mockBadConditions(page: Page) {
   await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Ll]yon/, banLyon);
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
-      current: { temperature_2m: 38, apparent_temperature: 42, relative_humidity_2m: 95, wind_speed_10m: 70, weather_code: 95, cloud_cover: 100 },
-      daily: { temperature_2m_max: Array(16).fill(40), temperature_2m_min: Array(16).fill(30), uv_index_max: Array(16).fill(10), precipitation_probability_max: Array(16).fill(95), weather_code: Array(16).fill(95), wind_speed_10m_max: Array(16).fill(80) }
+      current: { temperature_2m: 38, apparent_temperature: 42, relative_humidity_2m: 95, wind_speed_10m: 70, wind_gusts_10m: 90, weather_code: 95, cloud_cover: 100, visibility: 3000 },
+      daily: { temperature_2m_max: Array(16).fill(40), temperature_2m_min: Array(16).fill(30), uv_index_max: Array(16).fill(10), precipitation_probability_max: Array(16).fill(95), weather_code: Array(16).fill(95), wind_speed_10m_max: Array(16).fill(80), wind_gusts_10m_max: Array(16).fill(95), precipitation_sum: Array(16).fill(20), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(3000), daylight_duration: Array(16).fill(28800) }
     }})
   );
   await page.route(/air-quality-api\.open-meteo\.com/, route =>
@@ -168,8 +168,8 @@ export async function mockOutOfRangeAqi(page: Page) {
   await page.route(/api-adresse\.data\.gouv\.fr.*q=.*[Ll]yon/, banLyon);
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
-      current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, wind_speed_10m: 12, weather_code: 0, cloud_cover: 10 },
-      daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(10), weather_code: Array(16).fill(0), wind_speed_10m_max: Array(16).fill(15) }
+      current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, wind_speed_10m: 12, wind_gusts_10m: 22, weather_code: 0, cloud_cover: 10, visibility: 12000 },
+      daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(10), weather_code: Array(16).fill(0), wind_speed_10m_max: Array(16).fill(15), wind_gusts_10m_max: Array(16).fill(25), precipitation_sum: Array(16).fill(0), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(12000), daylight_duration: Array(16).fill(28800) }
     }})
   );
   // Only 24h of AQI — J+5 index (5*24+12=132) exceeds array length → outOfRange=true

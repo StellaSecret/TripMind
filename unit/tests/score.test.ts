@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcScore, scLbl, SCORE_WEIGHTS, type Lang } from '../lib/score';
+import { calcScore, calcTravelRisk, modeRisk, scLbl, SCORE_WEIGHTS, type Lang } from '../lib/score';
 
 describe('calcScore — weather thresholds', () => {
   const clearAQ = { aqi: 0, polMax: 0 };
@@ -410,6 +410,84 @@ describe('calcScore — combined scenarios matching Playwright tests', () => {
   });
 });
 
+describe('calcScore — precipitation amount, snow, visibility and gusts', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('10 mm rain → -18', () => {
+    expect(calcScore({ code: 0, temp: 20, precipMm: 10 }, clearAQ)).toBe(82);
+  });
+
+  it('2 cm snow → -12, 5 cm → -20', () => {
+    expect(calcScore({ code: 0, temp: 20, snowCm: 2 }, clearAQ)).toBe(88);
+    expect(calcScore({ code: 0, temp: 20, snowCm: 5 }, clearAQ)).toBe(80);
+  });
+
+  it('visibility < 1 km → -10', () => {
+    expect(calcScore({ code: 0, temp: 20, visibility: 0.8 }, clearAQ)).toBe(90);
+  });
+
+  it('gusts ≥ 60 km/h → -5', () => {
+    expect(calcScore({ code: 0, temp: 20, gust: 60 }, clearAQ)).toBe(95);
+  });
+
+  it('worst of amount and probability, not sum', () => {
+    expect(calcScore({ code: 0, temp: 20, precipProb: 80, precipMm: 10 }, clearAQ)).toBe(70);
+  });
+
+  it('worst of wind and gust, not sum', () => {
+    expect(calcScore({ code: 0, temp: 20, wind: 70, gust: 70 }, clearAQ)).toBe(92);
+  });
+
+  it('daylight 8h → no penalty, 7h → -2, 3h → -4', () => {
+    expect(calcScore({ code: 0, temp: 20, daylight: 8 }, clearAQ)).toBe(100);
+    expect(calcScore({ code: 0, temp: 20, daylight: 7 }, clearAQ)).toBe(98);
+    expect(calcScore({ code: 0, temp: 20, daylight: 3 }, clearAQ)).toBe(96);
+  });
+
+  it('daylight and WMO code use the worse penalty, not a sum', () => {
+    expect(calcScore({ code: 61, temp: 20, daylight: 3 }, clearAQ)).toBe(88);
+  });
+});
+
+describe('calcTravelRisk — hazard and exposure', () => {
+  it('clear weather, short trip → low risk 0', () => {
+    expect(calcTravelRisk({ code: 0, temp: 20, precipMm: 0, visibility: 10 }, { durSec: 3600 }))
+      .toEqual({ risk: 0, level: 'low' });
+  });
+
+  it('storm + long trip → risk 50 (moderate)', () => {
+    const r = calcTravelRisk({ code: 95, temp: 20 }, { durSec: 14400 });
+    expect(r.risk).toBe(50);
+    expect(r.level).toBe('moderate');
+  });
+
+  it('snow, gusts and poor visibility → high risk', () => {
+    const r = calcTravelRisk({ code: 71, temp: 0, snowCm: 5, gust: 60, visibility: 0.5 }, null);
+    expect(r.risk).toBe(60);
+    expect(r.level).toBe('high');
+  });
+
+  it('short daylight adds 10 to travel risk', () => {
+    const r = calcTravelRisk({ code: 0, temp: 20, daylight: 3 }, null);
+    expect(r.risk).toBe(10);
+    expect(r.level).toBe('low');
+  });
+
+  it('limited daylight adds 5 to travel risk', () => {
+    expect(calcTravelRisk({ code: 0, temp: 20, daylight: 7 }, null).risk).toBe(5);
+  });
+
+  it('car exposure is 5x train exposure', () => {
+    expect(modeRisk(100, 'car')).toBe(100);
+    expect(modeRisk(100, 'train')).toBe(20);
+  });
+
+  it('risk stays within [0, 100]', () => {
+    expect(modeRisk(100, 'bike')).toBe(100);
+    expect(modeRisk(0, 'bike')).toBe(0);
+  });
+});
+
 describe('scLbl — French (default)', () => {
   it('75 → Bonnes conditions', () => expect(scLbl(75)).toBe('Bonnes conditions'));
   it('100 → Bonnes conditions', () => expect(scLbl(100)).toBe('Bonnes conditions'));
@@ -452,6 +530,10 @@ describe('SCORE_WEIGHTS — structure', () => {
   it('all penalty groups exist', () => {
     expect(SCORE_WEIGHTS.wmo).toBeDefined();
     expect(SCORE_WEIGHTS.precip).toBeDefined();
+    expect(SCORE_WEIGHTS.precipAmt).toBeDefined();
+    expect(SCORE_WEIGHTS.snow).toBeDefined();
+    expect(SCORE_WEIGHTS.visibility).toBeDefined();
+    expect(SCORE_WEIGHTS.daylight).toBeDefined();
     expect(SCORE_WEIGHTS.cloud).toBeDefined();
     expect(SCORE_WEIGHTS.temp).toBeDefined();
     expect(SCORE_WEIGHTS.wind).toBeDefined();
@@ -473,7 +555,10 @@ describe('SCORE_WEIGHTS — structure', () => {
 
   it('worst case total deductions ≤ 95 (score never below 5)', () => {
     const w = SCORE_WEIGHTS;
-    const maxWeather = Math.max(w.wmo.storm, w.precip.veryHigh, w.cloud.overcast);
+    const maxWeather = Math.max(
+      w.wmo.storm, w.precip.veryHigh, w.precipAmt.heavy, w.snow.heavy,
+      w.visibility.veryPoor, w.daylight.short, w.cloud.overcast
+    );
     const maxAir = Math.max(w.aqi.veryPoor, w.pollutant.high);
     const maxDeduction =
       maxWeather +

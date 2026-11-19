@@ -6,6 +6,10 @@
 export const SCORE_WEIGHTS = {
   wmo:       { storm: 25, freezing: 22, heavyRain: 18, snow: 15, rain: 12, drizzle: 7, fog: 5, cloudy: 3 },
   precip:    { veryHigh: 30, high: 18, moderate: 8, low: 3 },
+  precipAmt: { heavy: 18, moderate: 10, light: 4 },
+  snow:      { heavy: 20, moderate: 12, light: 6 },
+  visibility:{ veryPoor: 10, poor: 6, moderate: 3 },
+  daylight:  { short: 4, limited: 2 },
   cloud:     { overcast: 5, cloudy: 3, partly: 1 },
   temp:      { extreme: 10, uncomfortable: 5 },
   wind:      { severe: 8, strong: 5, moderate: 2 },
@@ -23,6 +27,11 @@ export interface WeatherInput {
   tmax?: number | null;
   tmin?: number | null;
   precipProb?: number | null;
+  precipMm?: number | null;
+  snowCm?: number | null;
+  visibility?: number | null;
+  gust?: number | null;
+  daylight?: number | null;
   clouds?: number | null;
   humidity?: number | null;
   wind?: number | null;
@@ -45,8 +54,13 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
     typeof v === 'number' && Number.isFinite(v) ? v : null;
   const c     = num(m.code);
   const pp    = num(m.precipProb);
+  const pmm   = num(m.precipMm);
+  const snow  = num(m.snowCm);
+  const vis   = num(m.visibility);
+  const dl    = num(m.daylight);
   const cl    = num(m.clouds);
   const wind  = num(m.wind);
+  const gust  = num(m.gust);
   const uv    = num(m.uv);
   const hum   = num(m.humidity);
   const feels = num(m.feels);
@@ -77,7 +91,27 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
   else if (pp !== null && pp >= 40) precipPenalty = w.precip.moderate;
   else if (pp !== null && pp >= 20) precipPenalty = w.precip.low;
 
-  s -= Math.max(weatherPenalty, cloudPenalty, precipPenalty);
+  let precipAmtPenalty = 0;
+  if      (pmm !== null && pmm >= 10) precipAmtPenalty = w.precipAmt.heavy;
+  else if (pmm !== null && pmm >= 5)  precipAmtPenalty = w.precipAmt.moderate;
+  else if (pmm !== null && pmm >= 1)  precipAmtPenalty = w.precipAmt.light;
+
+  let snowPenalty = 0;
+  if      (snow !== null && snow >= 5) snowPenalty = w.snow.heavy;
+  else if (snow !== null && snow >= 2) snowPenalty = w.snow.moderate;
+  else if (snow !== null && snow >= 0.5) snowPenalty = w.snow.light;
+
+  let visibilityPenalty = 0;
+  if      (vis !== null && vis < 1)  visibilityPenalty = w.visibility.veryPoor;
+  else if (vis !== null && vis < 5)  visibilityPenalty = w.visibility.poor;
+  else if (vis !== null && vis < 10) visibilityPenalty = w.visibility.moderate;
+
+  let daylightPenalty = 0;
+  if      (dl !== null && dl < 4) daylightPenalty = w.daylight.short;
+  else if (dl !== null && dl < 8) daylightPenalty = w.daylight.limited;
+
+  s -= Math.max(weatherPenalty, cloudPenalty, precipPenalty,
+                precipAmtPenalty, snowPenalty, visibilityPenalty, daylightPenalty);
 
   // Temperature: use the worst of current, feels-like and daily extremes.
   const tempPenalty = (t: number | null): number => {
@@ -93,12 +127,15 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
     tempPenalty(tmin)
   );
 
-  // Wind
-  if (wind !== null) {
-    if      (wind >= 70) s -= w.wind.severe;
-    else if (wind >= 50) s -= w.wind.strong;
-    else if (wind >= 30) s -= w.wind.moderate;
-  }
+  // Wind: worst of sustained speed and gusts.
+  const windPenalty = (v: number | null): number => {
+    if (v === null) return 0;
+    if      (v >= 70) return w.wind.severe;
+    if      (v >= 50) return w.wind.strong;
+    if      (v >= 30) return w.wind.moderate;
+    return 0;
+  };
+  s -= Math.max(windPenalty(wind), windPenalty(gust));
 
   // UV
   if (uv !== null) {
@@ -144,6 +181,67 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
   else if (p > 10)  s -= w.pollen.moderate;
 
   return Math.max(5, Math.min(100, Math.round(s)));
+}
+
+export type RiskLevel = 'low' | 'moderate' | 'high';
+
+export interface RouteInput {
+  distKm?: number | null;
+  durSec?: number | null;
+}
+
+export interface TravelRisk {
+  risk: number;
+  level: RiskLevel;
+}
+
+export const MODE_EXPOSURE = {
+  car: 1, carpool: 1, bus: 0.9, bike: 1.2, train: 0.2,
+};
+
+export function calcTravelRisk(m: WeatherInput, rt?: RouteInput | null): TravelRisk {
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const c = num(m.code);
+  let hazard = 0;
+
+  if (c !== null) {
+    if      (c >= 95) hazard += 30;
+    else if (c === 56 || c === 57 || c === 66 || c === 67) hazard += 25;
+    else if (c === 85 || c === 86 || (c >= 71 && c <= 77)) hazard += 20;
+    else if (c >= 80) hazard += 15;
+    else if (c >= 51) hazard += 5;
+  }
+
+  const pmm = num(m.precipMm);
+  const snow = num(m.snowCm);
+  const vis = num(m.visibility);
+  const wind = num(m.wind);
+  const gust = num(m.gust);
+  const dl = num(m.daylight);
+  if (pmm !== null && pmm >= 10) hazard += 10;
+  if (snow !== null && snow >= 5) hazard += 10;
+  if (vis !== null && vis < 5) hazard += 15;
+  if (wind !== null && wind >= 50) hazard += 5;
+  if (gust !== null && gust >= 60) hazard += 15;
+  if (dl !== null) {
+    if (dl < 4) hazard += 10;
+    else if (dl < 8) hazard += 5;
+  }
+
+  const durSec = num(rt && rt.durSec);
+  if (durSec !== null) {
+    if (durSec >= 14400) hazard += 20;
+    else if (durSec >= 7200) hazard += 10;
+  }
+
+  const risk = Math.max(0, Math.min(100, Math.round(hazard)));
+  const level: RiskLevel = risk >= 60 ? 'high' : risk >= 30 ? 'moderate' : 'low';
+  return { risk, level };
+}
+
+export function modeRisk(risk: number, mode: keyof typeof MODE_EXPOSURE): number {
+  return Math.max(0, Math.min(100, Math.round(risk * MODE_EXPOSURE[mode])));
 }
 
 export type Lang = 'fr' | 'en';

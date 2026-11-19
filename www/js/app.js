@@ -79,6 +79,8 @@
       wmoCode45: 'Brumeux', wmoCode51: 'Bruine', wmoCode61: 'Pluie',
       wmoCode71: 'Neige', wmoCode80: 'Averses', wmoCode95: 'Orageux',
       windMax: 'Vent max', precip: 'Précip.', humidity: 'Humidité', clouds: 'Nuages',
+      gust: 'Rafales', precipAmt: 'Pluie', snow: 'Neige', visibility: 'Visibilité', daylight: 'Ensoleillement',
+      travelRisk: 'Risque de trajet', riskLow: 'Faible', riskModerate: 'Modéré', riskHigh: 'Élevé',
       feelsLike: 'Ressenti ', feelsEst: 'Ressenti estimé ',
       minMax: 'min / max',
       /* UV */
@@ -237,6 +239,8 @@
       wmoCode45: 'Foggy', wmoCode51: 'Drizzle', wmoCode61: 'Rain',
       wmoCode71: 'Snow', wmoCode80: 'Showers', wmoCode95: 'Thunderstorm',
       windMax: 'Max wind', precip: 'Precip.', humidity: 'Humidity', clouds: 'Clouds',
+      gust: 'Gusts', precipAmt: 'Rainfall', snow: 'Snow', visibility: 'Visibility', daylight: 'Daylight',
+      travelRisk: 'Travel risk', riskLow: 'Low', riskModerate: 'Moderate', riskHigh: 'High',
       feelsLike: 'Feels like ', feelsEst: 'Est. feels ',
       minMax: 'min / max',
       /* UV */
@@ -1339,14 +1343,21 @@
     var offset = dayOffset();
     var url = 'https://api.open-meteo.com/v1/forecast?' +
       'latitude=' + lat + '&longitude=' + lon +
-      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,cloud_cover' +
-      '&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,weather_code,wind_speed_10m_max' +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code,cloud_cover,visibility' +
+      '&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,weather_code,wind_speed_10m_max,wind_gusts_10m_max,precipitation_sum,snowfall_sum,visibility_mean,daylight_duration' +
       '&timezone=auto&forecast_days=16';
 
     return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error((LANG==='en'?'Weather HTTP ':'Météo HTTP ') + r.status); return r.json(); })
       .then(function(d) {
         var dy = d.daily;
+        var rn = function(v) { return (typeof v === 'number' && isFinite(v)) ? Math.round(v) : null; };
+        var maxRn = function(a, b) {
+          var x = rn(a), y = rn(b);
+          return x === null ? y : y === null ? x : Math.max(x, y);
+        };
+        var r1 = function(v) { return (typeof v === 'number' && isFinite(v)) ? Math.round(v * 10) / 10 : null; };
+        var km = function(v) { return (typeof v === 'number' && isFinite(v)) ? r1(v / 1000) : null; };
         if (offset === 0) {
           // Aujourd'hui : données actuelles + prévisions daily
           var c = d.current;
@@ -1354,9 +1365,13 @@
             temp: Math.round(c.temperature_2m), feels: Math.round(c.apparent_temperature),
             humidity: Math.round(c.relative_humidity_2m),
             wind: Math.max(Math.round(c.wind_speed_10m), Math.round(dy.wind_speed_10m_max[0])),
+            gust: maxRn(c.wind_gusts_10m, dy.wind_gusts_10m_max[0]),
             code: c.weather_code, clouds: Math.round(c.cloud_cover),
             tmax: Math.round(dy.temperature_2m_max[0]), tmin: Math.round(dy.temperature_2m_min[0]),
             precipProb: dy.precipitation_probability_max[0],
+            precipMm: r1(dy.precipitation_sum[0]), snowCm: r1(dy.snowfall_sum[0]),
+            visibility: km(c.visibility),
+            daylight: dy.daylight_duration[0] != null ? r1(dy.daylight_duration[0] / 3600) : null,
             uv: Math.round(dy.uv_index_max[0]),
             isForecast: false
           };
@@ -1368,11 +1383,15 @@
             feels: Math.round((dy.temperature_2m_max[i] + dy.temperature_2m_min[i]) / 2) - 2,
             humidity: null,
             wind: Math.round(dy.wind_speed_10m_max[i]),
+            gust: rn(dy.wind_gusts_10m_max[i]),
             code: dy.weather_code[i],
             clouds: null,
             tmax: Math.round(dy.temperature_2m_max[i]),
             tmin: Math.round(dy.temperature_2m_min[i]),
             precipProb: dy.precipitation_probability_max[i],
+            precipMm: r1(dy.precipitation_sum[i]), snowCm: r1(dy.snowfall_sum[i]),
+            visibility: km(dy.visibility_mean[i]),
+            daylight: dy.daylight_duration[i] != null ? r1(dy.daylight_duration[i] / 3600) : null,
             uv: Math.round(dy.uv_index_max[i]),
             isForecast: true
           };
@@ -1958,9 +1977,11 @@
    * Weights rationale:
    *   Weather (WMO code) : up to -25  — direct travel impact (snow/freezing distinct)
    *   Precipitation prob.: up to -30  — rain risk even when current code is clear
+   *   Precipitation amount / snow / visibility: up to -18 / -20 / -10
+   *   Daylight           : up to -4   — short winter days
    *   Cloud cover        : up to -5   — overcast sky
    *   Temperature        : up to -10  — worst of current, feels-like, daily min/max
-   *   Wind speed         : up to -8   — travel discomfort / exposure
+   *   Wind speed / gusts : up to -8   — travel discomfort / exposure
    *   UV index           : up to -6   — health risk
    *   Humidity           : up to -3   — comfort
    *   Air quality        : up to -25  — worst of AQI and pollutant thresholds
@@ -1973,6 +1994,10 @@
     wmo:       { storm:25, freezing:22, heavyRain:18, snow:15, rain:12, drizzle:7, fog:5, cloudy:3 },
     // Precipitation probability penalties
     precip:    { veryHigh:30, high:18, moderate:8, low:3 },
+    precipAmt: { heavy:18, moderate:10, light:4 },
+    snow:      { heavy:20, moderate:12, light:6 },
+    visibility:{ veryPoor:10, poor:6, moderate:3 },
+    daylight:  { short:4, limited:2 },
     // Cloud cover (%) penalties
     cloud:     { overcast:5, cloudy:3, partly:1 },
     // Temperature (°C) comfort penalties
@@ -1996,8 +2021,13 @@
     var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; };
     var c     = num(m.code);
     var pp    = num(m.precipProb);
+    var pmm   = num(m.precipMm);
+    var snow  = num(m.snowCm);
+    var vis   = num(m.visibility);
+    var dl    = num(m.daylight);
     var cl    = num(m.clouds);
     var wind  = num(m.wind);
+    var gust  = num(m.gust);
     var uv    = num(m.uv);
     var hum   = num(m.humidity);
     var feels = num(m.feels);
@@ -2028,7 +2058,27 @@
     else if (pp !== null && pp>=40) precipPenalty = w.precip.moderate;
     else if (pp !== null && pp>=20) precipPenalty = w.precip.low;
 
-    s -= Math.max(weatherPenalty, cloudPenalty, precipPenalty);
+    var precipAmtPenalty = 0;
+    if      (pmm !== null && pmm >= 10) precipAmtPenalty = w.precipAmt.heavy;
+    else if (pmm !== null && pmm >= 5)  precipAmtPenalty = w.precipAmt.moderate;
+    else if (pmm !== null && pmm >= 1)  precipAmtPenalty = w.precipAmt.light;
+
+    var snowPenalty = 0;
+    if      (snow !== null && snow >= 5) snowPenalty = w.snow.heavy;
+    else if (snow !== null && snow >= 2) snowPenalty = w.snow.moderate;
+    else if (snow !== null && snow >= 0.5) snowPenalty = w.snow.light;
+
+    var visibilityPenalty = 0;
+    if      (vis !== null && vis < 1)  visibilityPenalty = w.visibility.veryPoor;
+    else if (vis !== null && vis < 5)  visibilityPenalty = w.visibility.poor;
+    else if (vis !== null && vis < 10) visibilityPenalty = w.visibility.moderate;
+
+    var daylightPenalty = 0;
+    if      (dl !== null && dl < 4) daylightPenalty = w.daylight.short;
+    else if (dl !== null && dl < 8) daylightPenalty = w.daylight.limited;
+
+    s -= Math.max(weatherPenalty, cloudPenalty, precipPenalty,
+                  precipAmtPenalty, snowPenalty, visibilityPenalty, daylightPenalty);
 
     // Temperature: use the worst of current, feels-like and daily extremes.
     var tempPenalty = function(t) {
@@ -2044,12 +2094,15 @@
       tempPenalty(tmin)
     );
 
-    // Wind
-    if (wind !== null) {
-      if      (wind >= 70) s -= w.wind.severe;
-      else if (wind >= 50) s -= w.wind.strong;
-      else if (wind >= 30) s -= w.wind.moderate;
-    }
+    // Wind: worst of sustained speed and gusts.
+    var windPenalty = function(v) {
+      if (v === null) return 0;
+      if      (v >= 70) return w.wind.severe;
+      if      (v >= 50) return w.wind.strong;
+      if      (v >= 30) return w.wind.moderate;
+      return 0;
+    };
+    s -= Math.max(windPenalty(wind), windPenalty(gust));
 
     // UV
     if (uv !== null) {
@@ -2097,6 +2150,43 @@
     return { score: Math.max(5, Math.min(100, Math.round(s))) };
   }
 
+  var MODE_EXPOSURE = { car:1, carpool:1, bus:0.9, bike:1.2, train:0.2 };
+
+  function calcTravelRisk(m, rt) {
+    var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; };
+    var c = num(m && m.code), hazard = 0;
+    if (c !== null) {
+      if      (c >= 95) hazard += 30;
+      else if (c===56 || c===57 || c===66 || c===67) hazard += 25;
+      else if (c===85 || c===86 || (c>=71 && c<=77)) hazard += 20;
+      else if (c >= 80) hazard += 15;
+      else if (c >= 51) hazard += 5;
+    }
+    var pmm = num(m && m.precipMm), snow = num(m && m.snowCm);
+    var vis = num(m && m.visibility), wind = num(m && m.wind), gust = num(m && m.gust);
+    var dl = num(m && m.daylight);
+    if (pmm !== null && pmm >= 10) hazard += 10;
+    if (snow !== null && snow >= 5) hazard += 10;
+    if (vis !== null && vis < 5) hazard += 15;
+    if (wind !== null && wind >= 50) hazard += 5;
+    if (gust !== null && gust >= 60) hazard += 15;
+    if (dl !== null) {
+      if (dl < 4) hazard += 10;
+      else if (dl < 8) hazard += 5;
+    }
+    var durSec = num(rt && rt.durSec);
+    if (durSec !== null) {
+      if (durSec >= 14400) hazard += 20;
+      else if (durSec >= 7200) hazard += 10;
+    }
+    var risk = Math.max(0, Math.min(100, Math.round(hazard)));
+    return { risk: risk, level: risk >= 60 ? 'high' : risk >= 30 ? 'moderate' : 'low' };
+  }
+
+  function modeRisk(risk, mode) {
+    return Math.max(0, Math.min(100, Math.round(risk * MODE_EXPOSURE[mode])));
+  }
+
   /* ─── Modes ──────────────────────────────────────── */
   /* ─── Mode comparison constants ─────────────────────────────────────────
    * All rates are per-km estimates for France; sourced as noted.
@@ -2140,9 +2230,10 @@
     },
   };
 
-  function calcModes(rt, trains) {
+  function calcModes(rt, trains, m) {
     var dist=(rt&&rt.distKm)||0, durSec=(rt&&rt.durSec)||0, modes=[];
     if (!dist) return modes;
+    var travelRisk = calcTravelRisk(m, rt).risk;
 
     var c = MODE_COSTS;
     var carburant   = Math.round(dist * c.car.fuelLPer100km / 100 * c.car.fuelEurPerL);
@@ -2153,7 +2244,7 @@
       ? t('carFuelToll')(carburant, peages)
       : t('carFuelOnly');
     modes.push({
-      mode:t('modeCar'), icon:'🚗', duree:(rt&&rt.dur)||'—',
+      modeKey:'car', mode:t('modeCar'), icon:'🚗', duree:(rt&&rt.dur)||'—',
       cout:'~' + coutCarSolo + '€',
       fib:78, co2kg:co2Car, co2:co2Car+' kg',
       score:62, note:noteVoiture  // already uses t() below
@@ -2171,7 +2262,7 @@
         ? Math.round(Math.max(c.train.terMin, dist * c.train.terEurPerKm))
         : Math.round(Math.min(c.train.tgvMax, Math.max(c.train.tgvMin, dist * c.train.tgvEurPerKm)));
       modes.push({
-        mode:t('modeTrain'), icon:'🚆', duree:tr0.duree,
+        modeKey:'train', mode:t('modeTrain'), icon:'🚆', duree:tr0.duree,
         cout:'~' + coutTrain + '€',
         fib:tr0.fiabilite, co2kg:co2t,
         co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',
@@ -2183,7 +2274,7 @@
         ? Math.round(Math.max(c.train.terMin, dist * c.train.terEurPerKm))
         : Math.round(Math.min(c.train.tgvMax, Math.max(c.train.tgvMin, dist * c.train.tgvEurPerKm)));
       modes.push({
-        mode:'Train', icon:'🚆',
+        modeKey:'train', mode:'Train', icon:'🚆',
         duree:fmtDur(Math.round(Math.max(20, dist * 0.45)) * 60),
         cout:'~' + coutTrain2 + '€',
         fib:88, co2kg:co2t2,
@@ -2199,7 +2290,7 @@
       var co2b = +(c.bus.co2gPerKm * dist / 1000).toFixed(1);
       var coutBus = Math.round(Math.max(c.bus.minEur, dist * c.bus.eurPerKm));
       modes.push({
-        mode:t('modeBus'), icon:'🚌',
+        modeKey:'bus', mode:t('modeBus'), icon:'🚌',
         duree:fmtDur(Math.round(durSec * c.bus.durationFactor)),
         cout:'~' + coutBus + '€',
         fib:82, co2kg:+co2b, co2:co2b+' kg',
@@ -2212,7 +2303,7 @@
       var co2v = +(c.carpool.co2gPerKm * dist / 1000).toFixed(1);
       var coutCov = Math.round(Math.max(c.carpool.minEur, dist * c.carpool.eurPerKm));
       modes.push({
-        mode:t('modeCarpool'), icon:'🚘',
+        modeKey:'carpool', mode:t('modeCarpool'), icon:'🚘',
         duree:fmtDur(Math.round(durSec * c.carpool.durationFactor)),
         cout:'~' + coutCov + '€',
         fib:72, co2kg:+co2v, co2:co2v+' kg',
@@ -2222,12 +2313,17 @@
 
     if (dist <= c.bike.maxDistKm) {
       modes.push({
-        mode:t('modeBike'), icon:'🚲',
+        modeKey:'bike', mode:t('modeBike'), icon:'🚲',
         duree:fmtDur(Math.round(dist / c.bike.speedKmH * 3600)),
         cout:'0€', fib:95, co2kg:c.bike.co2gPerKm, co2:'0',
         score:dist <= 10 ? 82 : 60, note:t('bikeSpeed')
       });
     }
+
+    modes.forEach(function(mo) {
+      mo.risk = modeRisk(travelRisk, mo.modeKey);
+      mo.score = Math.max(5, mo.score - Math.round(mo.risk * 0.35));
+    });
 
     var best = Math.max.apply(null, modes.map(function(m) { return m.score; }));
     var bm = modes.find(function(m) { return m.score === best; });
@@ -2299,7 +2395,11 @@
       '<div style="font-size:.58rem;font-family:var(--fm);color:var(--t3)">'+t('minMax')+'</div>'+
       '<div style="font-size:.86rem;font-weight:700;font-family:var(--fm)">'+m.tmin+'° / '+m.tmax+'°</div></div></div>'+
       (m.wind!=null?'<div class="wstat"><div class="wsl">'+t('windMax')+'</div><div class="wsv" style="color:var(--t2)">'+m.wind+' km/h</div></div>':'')+
-      '<div class="wstat"><div class="wsl">'+t('precip')+'</div><div class="wsv" style="color:'+(m.precipProb>50?'#3B82F6':'var(--t2)')+'">'+m.precipProb+'%</div></div>'+
+      (m.gust!=null?'<div class="wstat"><div class="wsl">'+t('gust')+'</div><div class="wsv" style="color:var(--t2)">'+m.gust+' km/h</div></div>':'')+
+      '<div class="wstat"><div class="wsl">'+t('precip')+'</div><div class="wsv" style="color:'+(m.precipProb>50?'#3B82F6':'var(--t2)')+'">'+m.precipProb+'%'+(m.precipMm!=null?' · '+m.precipMm+' mm':'')+'</div></div>'+
+      (m.snowCm!=null&&m.snowCm>0?'<div class="wstat"><div class="wsl">'+t('snow')+'</div><div class="wsv" style="color:#06B6D4">'+m.snowCm+' cm</div></div>':'')+
+      (m.visibility!=null?'<div class="wstat"><div class="wsl">'+t('visibility')+'</div><div class="wsv" style="color:var(--t2)">'+m.visibility+' km</div></div>':'')+
+      (m.daylight!=null?'<div class="wstat"><div class="wsl">'+t('daylight')+'</div><div class="wsv" style="color:var(--t2)">'+m.daylight+' h</div></div>':'')+
       (m.humidity!=null?'<div class="wstat"><div class="wsl">'+t('humidity')+'</div><div class="wsv" style="color:#06B6D4">'+m.humidity+'%</div></div>':'')+
       (m.clouds!=null?'<div class="wstat"><div class="wsl">'+t('clouds')+'</div><div class="wsv">'+m.clouds+'%</div></div>':'')+
       '<div class="wt2"><div class="wsl" style="margin-bottom:5px">UV '+m.uv+'/11 — <span style="color:'+uv.c+'">'+uv.l+'</span></div>'+
@@ -2333,13 +2433,16 @@
   }
 
   function renderRoute() {
-    var rt=DATA.rt, modes=DATA.modes;
+    var rt=DATA.rt, modes=DATA.modes, tr=DATA.travelRisk;
+    var riskCol = !tr ? 'var(--t2)' : tr.level==='high'?'#EF4444':tr.level==='moderate'?'#F59E0B':'#10B981';
     var rtH=!rt?'<div style="padding:12px;color:var(--t3);font-size:.75rem;font-family:var(--fm)">'+t('routeNA')+'</div>':
       '<div class="wg"><div class="wmain" style="flex-direction:column;align-items:flex-start;gap:4px">'+
       '<div style="font-size:1.4rem;font-weight:800;font-family:var(--fm)">'+rt.dist+'</div>'+
       '<div style="font-size:.7rem;color:var(--t2)">'+rt.dur+t('routeEstim')+'</div></div>'+
       '<div class="wstat"><div class="wsl">Durée</div><div class="wsv">'+rt.dur+'</div></div>'+
-      '<div class="wstat"><div class="wsl">Distance</div><div class="wsv">'+rt.dist+'</div></div></div>'+
+      '<div class="wstat"><div class="wsl">Distance</div><div class="wsv">'+rt.dist+'</div></div>'+
+      (tr?'<div class="wstat"><div class="wsl">'+t('travelRisk')+'</div><div class="wsv" style="color:'+riskCol+'">'+t('risk'+tr.level.charAt(0).toUpperCase()+tr.level.slice(1))+' · '+tr.risk+'/100</div></div>':'')+
+      '</div>'+
       '<div class="info-note">ℹ '+rt.note+'</div>';  // rt.note already uses t()
     return (
       '<div class="card"><div class="ch"><span class="ct">'+t('routeCard')+'</span><span class="src-tag">OSRM · OSM</span></div><div class="cb">'+rtH+'</div></div>'+
@@ -2352,6 +2455,7 @@
           '<div class="mstat"><span class="mk">'+t('costLabel')+'</span><span class="mv" style="color:var(--em)">'+m.cout+'</span></div>'+
           '<div class="mstat"><span class="mk">'+t('co2Label')+'</span><span class="mv" style="color:'+
           (m.co2kg===0?'#10B981':m.co2kg<30?'#10B981':m.co2kg<80?'#F59E0B':'#EF4444')+'">'+m.co2+'</span></div>'+
+          (m.risk!=null?'<div class="mstat"><span class="mk">'+t('travelRisk')+'</span><span class="mv" style="color:'+(m.risk>=60?'#EF4444':m.risk>=30?'#F59E0B':'#10B981')+'">'+m.risk+'/100</span></div>':'')+
           (m.note?'<div style="font-size:.55rem;color:var(--t3);font-family:var(--fm);margin-top:4px">'+m.note+'</div>':'')+
           '</div>';
       }).join('')+'</div></div></div>'
@@ -2755,8 +2859,9 @@
     }
 
     function defaultMeteo() {
-      return { temp:15, feels:13, humidity:null, wind:10, code:3,
-               clouds:null, tmax:18, tmin:10, precipProb:30, uv:3,
+      return { temp:15, feels:13, humidity:null, wind:10, gust:null, code:3,
+               clouds:null, tmax:18, tmin:10, precipProb:30, precipMm:null,
+               snowCm:null, visibility:null, daylight:null, uv:3,
                isForecast: dayOffset() > 0 };
     }
 
@@ -2817,10 +2922,11 @@
 
     function stepRender(ctx) {
       var scoreRes = calcScore(ctx.m, ctx.aq);
-      var modes    = calcModes(ctx.rt, ctx.trains || null);
+      var travelRisk = calcTravelRisk(ctx.m, ctx.rt);
+      var modes    = calcModes(ctx.rt, ctx.trains || null, ctx.m);
       var reco     = buildReco(ctx.m, ctx.aq, ctx.rt);
       DATA = { m: ctx.m, aq: ctx.aq, rt: ctx.rt, trains: ctx.trains || null,
-               reco: reco, modes: modes, scoreRes: scoreRes,
+               reco: reco, modes: modes, scoreRes: scoreRes, travelRisk: travelRisk,
                oName: ctx.oGeo.name, dName: ctx.dGeo.name,
                queryOffset: queryOffset, queryTime: queryTimeStr, queryDateLbl: queryDateLbl };
       // Re-key on geocoded canonical names so that raw-input key and canonical key
