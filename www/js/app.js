@@ -1352,7 +1352,8 @@
           var c = d.current;
           return {
             temp: Math.round(c.temperature_2m), feels: Math.round(c.apparent_temperature),
-            humidity: Math.round(c.relative_humidity_2m), wind: Math.round(c.wind_speed_10m),
+            humidity: Math.round(c.relative_humidity_2m),
+            wind: Math.max(Math.round(c.wind_speed_10m), Math.round(dy.wind_speed_10m_max[0])),
             code: c.weather_code, clouds: Math.round(c.cloud_cover),
             tmax: Math.round(dy.temperature_2m_max[0]), tmin: Math.round(dy.temperature_2m_min[0]),
             precipProb: dy.precipitation_probability_max[0],
@@ -1955,9 +1956,12 @@
   /* ─── Score ──────────────────────────────────────────────────────────────
    * Starts at 100. Each factor deducts points based on severity.
    * Weights rationale:
-   *   Weather (WMO code) : up to -25  — direct travel impact
+   *   Weather (WMO code) : up to -25  — direct travel impact (snow/freezing distinct)
    *   Precipitation prob.: up to -30  — rain risk even when current code is clear
-   *   Temperature        : up to -10  — comfort, not safety
+   *   Temperature        : up to -10  — worst of current, feels-like, daily min/max
+   *   Wind speed         : up to -8   — travel discomfort / exposure
+   *   UV index           : up to -6   — health risk
+   *   Humidity           : up to -3   — comfort
    *   Air quality (AQI)  : up to -25  — health risk, comparable to bad weather
    *   Pollen             : up to -12  — affects allergy sufferers
    * Weather and precipitation use the worse penalty, not a sum.
@@ -1965,28 +1969,44 @@
    * ─────────────────────────────────────────────────────────────────────── */
   var SCORE_WEIGHTS = {
     // WMO weather code penalties
-    wmo:    { storm:25, heavyRain:18, rain:12, drizzle:7, fog:5, cloudy:3 },
+    wmo:      { storm:25, freezing:22, heavyRain:18, snow:15, rain:12, drizzle:7, fog:5, cloudy:3 },
     // Precipitation probability penalties
-    precip: { veryHigh:30, high:18, moderate:8, low:3 },
+    precip:   { veryHigh:30, high:18, moderate:8, low:3 },
     // Temperature (°C) comfort penalties
-    temp:   { extreme:10, uncomfortable:5 },
+    temp:     { extreme:10, uncomfortable:5 },
+    // Wind speed (km/h) penalties
+    wind:     { severe:8, strong:5, moderate:2 },
+    // UV index penalties
+    uv:       { extreme:6, veryHigh:4, high:2 },
+    // Relative humidity (%) penalties
+    humidity: { veryHigh:3, high:2 },
     // European/US AQI penalties
-    aqi:    { veryPoor:25, poor:15, moderate:8, fair:3 },
-    // Pollen (grain/m³) penalties
-    pollen: { veryHigh:12, high:7, moderate:3 }
+    aqi:      { veryPoor:25, poor:15, moderate:8, fair:3 },
+    // Pollen penalties
+    pollen:   { veryHigh:12, high:7, moderate:3 }
   };
 
   function calcScore(m, aq) {
     var s = 100, w = SCORE_WEIGHTS;
-    var c  = (typeof m.code === 'number' && isFinite(m.code)) ? m.code : null;
-    var pp = (typeof m.precipProb === 'number' && isFinite(m.precipProb)) ? m.precipProb : null;
-    var cl = (typeof m.clouds === 'number' && isFinite(m.clouds)) ? m.clouds : null;
+    var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; };
+    var c     = num(m.code);
+    var pp    = num(m.precipProb);
+    var cl    = num(m.clouds);
+    var wind  = num(m.wind);
+    var uv    = num(m.uv);
+    var hum   = num(m.humidity);
+    var feels = num(m.feels);
+    var tmax  = num(m.tmax);
+    var tmin  = num(m.tmin);
 
     // Weather: use the worse of WMO condition and precipitation probability.
     var weatherPenalty = 0;
     if      (c === null) weatherPenalty = w.wmo.cloudy;
     else if (c>=95) weatherPenalty = w.wmo.storm;
+    else if (c===56 || c===57 || c===66 || c===67) weatherPenalty = w.wmo.freezing;
+    else if (c===85 || c===86) weatherPenalty = w.wmo.snow;
     else if (c>=80) weatherPenalty = w.wmo.heavyRain;
+    else if (c>=71 && c<=77) weatherPenalty = w.wmo.snow;
     else if (c>=61) weatherPenalty = w.wmo.rain;
     else if (c>=51) weatherPenalty = w.wmo.drizzle;
     else if (c>=45) weatherPenalty = w.wmo.fog;
@@ -2005,9 +2025,39 @@
 
     s -= Math.max(weatherPenalty, precipPenalty);
 
-    // Temperature comfort
-    if      (m.temp < 0  || m.temp > 37) s -= w.temp.extreme;
-    else if (m.temp < 5  || m.temp > 33) s -= w.temp.uncomfortable;
+    // Temperature: use the worst of current, feels-like and daily extremes.
+    var tempPenalty = function(t) {
+      if (t === null) return 0;
+      if (t < 0 || t > 37) return w.temp.extreme;
+      if (t < 5 || t > 33) return w.temp.uncomfortable;
+      return 0;
+    };
+    s -= Math.max(
+      tempPenalty(num(m.temp)),
+      tempPenalty(feels),
+      tempPenalty(tmax),
+      tempPenalty(tmin)
+    );
+
+    // Wind
+    if (wind !== null) {
+      if      (wind >= 70) s -= w.wind.severe;
+      else if (wind >= 50) s -= w.wind.strong;
+      else if (wind >= 30) s -= w.wind.moderate;
+    }
+
+    // UV
+    if (uv !== null) {
+      if      (uv >= 11) s -= w.uv.extreme;
+      else if (uv >= 8)  s -= w.uv.veryHigh;
+      else if (uv >= 6)  s -= w.uv.high;
+    }
+
+    // Humidity
+    if (hum !== null) {
+      if      (hum >= 95) s -= w.humidity.veryHigh;
+      else if (hum >= 85) s -= w.humidity.high;
+    }
 
     // Air quality
     var a = aq.aqi || 0;

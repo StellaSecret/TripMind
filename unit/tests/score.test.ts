@@ -97,6 +97,114 @@ describe('calcScore — precipitation probability', () => {
   });
 });
 
+describe('calcScore — snow and freezing precipitation', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('snow (code 71) → -15', () => {
+    expect(calcScore({ code: 71, temp: 20 }, clearAQ)).toBe(85);
+  });
+
+  it('snow grains (code 77) → -15', () => {
+    expect(calcScore({ code: 77, temp: 20 }, clearAQ)).toBe(85);
+  });
+
+  it('snow showers (code 85) → -15', () => {
+    expect(calcScore({ code: 85, temp: 20 }, clearAQ)).toBe(85);
+  });
+
+  it('freezing drizzle (code 56) → -22', () => {
+    expect(calcScore({ code: 56, temp: 20 }, clearAQ)).toBe(78);
+  });
+
+  it('freezing rain (code 66) → -22', () => {
+    expect(calcScore({ code: 66, temp: 20 }, clearAQ)).toBe(78);
+  });
+
+  it('freezing rain with high precip uses the worse penalty', () => {
+    expect(calcScore({ code: 66, temp: 20, precipProb: 100 }, clearAQ)).toBe(70);
+  });
+});
+
+describe('calcScore — wind penalties', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('29 km/h → no penalty', () => {
+    expect(calcScore({ code: 0, temp: 20, wind: 29 }, clearAQ)).toBe(100);
+  });
+
+  it('30 km/h → -2', () => {
+    expect(calcScore({ code: 0, temp: 20, wind: 30 }, clearAQ)).toBe(98);
+  });
+
+  it('50 km/h → -5', () => {
+    expect(calcScore({ code: 0, temp: 20, wind: 50 }, clearAQ)).toBe(95);
+  });
+
+  it('70 km/h → -8', () => {
+    expect(calcScore({ code: 0, temp: 20, wind: 70 }, clearAQ)).toBe(92);
+  });
+});
+
+describe('calcScore — UV penalties', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('UV 5 → no penalty', () => {
+    expect(calcScore({ code: 0, temp: 20, uv: 5 }, clearAQ)).toBe(100);
+  });
+
+  it('UV 6 → -2', () => {
+    expect(calcScore({ code: 0, temp: 20, uv: 6 }, clearAQ)).toBe(98);
+  });
+
+  it('UV 8 → -4', () => {
+    expect(calcScore({ code: 0, temp: 20, uv: 8 }, clearAQ)).toBe(96);
+  });
+
+  it('UV 11 → -6', () => {
+    expect(calcScore({ code: 0, temp: 20, uv: 11 }, clearAQ)).toBe(94);
+  });
+});
+
+describe('calcScore — humidity penalties', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('84% humidity → no penalty', () => {
+    expect(calcScore({ code: 0, temp: 20, humidity: 84 }, clearAQ)).toBe(100);
+  });
+
+  it('85% humidity → -2', () => {
+    expect(calcScore({ code: 0, temp: 20, humidity: 85 }, clearAQ)).toBe(98);
+  });
+
+  it('95% humidity → -3', () => {
+    expect(calcScore({ code: 0, temp: 20, humidity: 95 }, clearAQ)).toBe(97);
+  });
+});
+
+describe('calcScore — feels-like and daily temperature extremes', () => {
+  const clearAQ = { aqi: 0, polMax: 0 };
+
+  it('feels-like 4°C with mild actual temp → -5', () => {
+    expect(calcScore({ code: 0, temp: 20, feels: 4 }, clearAQ)).toBe(95);
+  });
+
+  it('feels-like 42°C with mild actual temp → -10', () => {
+    expect(calcScore({ code: 0, temp: 20, feels: 42 }, clearAQ)).toBe(90);
+  });
+
+  it('daily max 40°C with mild current temp → -10', () => {
+    expect(calcScore({ code: 0, temp: 20, tmax: 40 }, clearAQ)).toBe(90);
+  });
+
+  it('daily min -5°C with mild current temp → -10', () => {
+    expect(calcScore({ code: 0, temp: 20, tmin: -5 }, clearAQ)).toBe(90);
+  });
+
+  it('actual and feels-like extremes use the worst penalty, not a sum', () => {
+    expect(calcScore({ code: 0, temp: 38, feels: 42 }, clearAQ)).toBe(90);
+  });
+});
+
 describe('calcScore — temperature penalties', () => {
   const clearAQ = { aqi: 0, polMax: 0 };
 
@@ -284,6 +392,9 @@ describe('SCORE_WEIGHTS — structure', () => {
     expect(SCORE_WEIGHTS.wmo).toBeDefined();
     expect(SCORE_WEIGHTS.precip).toBeDefined();
     expect(SCORE_WEIGHTS.temp).toBeDefined();
+    expect(SCORE_WEIGHTS.wind).toBeDefined();
+    expect(SCORE_WEIGHTS.uv).toBeDefined();
+    expect(SCORE_WEIGHTS.humidity).toBeDefined();
     expect(SCORE_WEIGHTS.aqi).toBeDefined();
     expect(SCORE_WEIGHTS.pollen).toBeDefined();
   });
@@ -300,7 +411,14 @@ describe('SCORE_WEIGHTS — structure', () => {
   it('worst case total deductions ≤ 95 (score never below 5)', () => {
     const w = SCORE_WEIGHTS;
     const maxWeather = Math.max(w.wmo.storm, w.precip.veryHigh);
-    const maxDeduction = maxWeather + w.temp.extreme + w.aqi.veryPoor + w.pollen.veryHigh;
+    const maxDeduction =
+      maxWeather +
+      w.temp.extreme +
+      w.wind.severe +
+      w.uv.extreme +
+      w.humidity.veryHigh +
+      w.aqi.veryPoor +
+      w.pollen.veryHigh;
     expect(maxDeduction).toBeLessThanOrEqual(95);
   });
 });

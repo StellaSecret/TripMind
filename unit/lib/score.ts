@@ -4,18 +4,27 @@
  */
 
 export const SCORE_WEIGHTS = {
-  wmo:    { storm: 25, heavyRain: 18, rain: 12, drizzle: 7, fog: 5, cloudy: 3 },
-  precip: { veryHigh: 30, high: 18, moderate: 8, low: 3 },
-  temp:   { extreme: 10, uncomfortable: 5 },
-  aqi:    { veryPoor: 25, poor: 15, moderate: 8, fair: 3 },
-  pollen: { veryHigh: 12, high: 7, moderate: 3 },
+  wmo:      { storm: 25, freezing: 22, heavyRain: 18, snow: 15, rain: 12, drizzle: 7, fog: 5, cloudy: 3 },
+  precip:   { veryHigh: 30, high: 18, moderate: 8, low: 3 },
+  temp:     { extreme: 10, uncomfortable: 5 },
+  wind:     { severe: 8, strong: 5, moderate: 2 },
+  uv:       { extreme: 6, veryHigh: 4, high: 2 },
+  humidity: { veryHigh: 3, high: 2 },
+  aqi:      { veryPoor: 25, poor: 15, moderate: 8, fair: 3 },
+  pollen:   { veryHigh: 12, high: 7, moderate: 3 },
 };
 
 export interface WeatherInput {
   code: number | null | undefined;
   temp: number;
+  feels?: number | null;
+  tmax?: number | null;
+  tmin?: number | null;
   precipProb?: number | null;
   clouds?: number | null;
+  humidity?: number | null;
+  wind?: number | null;
+  uv?: number | null;
 }
 
 export interface AirInput {
@@ -26,15 +35,26 @@ export interface AirInput {
 export function calcScore(m: WeatherInput, aq: AirInput): number {
   let s = 100;
   const w = SCORE_WEIGHTS;
-  const c  = typeof m.code === 'number' && Number.isFinite(m.code) ? m.code : null;
-  const pp = typeof m.precipProb === 'number' && Number.isFinite(m.precipProb) ? m.precipProb : null;
-  const cl = typeof m.clouds === 'number' && Number.isFinite(m.clouds) ? m.clouds : null;
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const c     = num(m.code);
+  const pp    = num(m.precipProb);
+  const cl    = num(m.clouds);
+  const wind  = num(m.wind);
+  const uv    = num(m.uv);
+  const hum   = num(m.humidity);
+  const feels = num(m.feels);
+  const tmax  = num(m.tmax);
+  const tmin  = num(m.tmin);
 
   // Weather: use the worse of WMO condition and precipitation probability.
   let weatherPenalty = 0;
   if      (c === null) weatherPenalty = w.wmo.cloudy;
   else if (c >= 95) weatherPenalty = w.wmo.storm;
+  else if (c === 56 || c === 57 || c === 66 || c === 67) weatherPenalty = w.wmo.freezing;
+  else if (c === 85 || c === 86) weatherPenalty = w.wmo.snow;
   else if (c >= 80) weatherPenalty = w.wmo.heavyRain;
+  else if (c >= 71 && c <= 77) weatherPenalty = w.wmo.snow;
   else if (c >= 61) weatherPenalty = w.wmo.rain;
   else if (c >= 51) weatherPenalty = w.wmo.drizzle;
   else if (c >= 45) weatherPenalty = w.wmo.fog;
@@ -53,9 +73,39 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
 
   s -= Math.max(weatherPenalty, precipPenalty);
 
-  // Temperature
-  if      (m.temp < 0  || m.temp > 37) s -= w.temp.extreme;
-  else if (m.temp < 5  || m.temp > 33) s -= w.temp.uncomfortable;
+  // Temperature: use the worst of current, feels-like and daily extremes.
+  const tempPenalty = (t: number | null): number => {
+    if (t === null) return 0;
+    if (t < 0 || t > 37) return w.temp.extreme;
+    if (t < 5 || t > 33) return w.temp.uncomfortable;
+    return 0;
+  };
+  s -= Math.max(
+    tempPenalty(num(m.temp)),
+    tempPenalty(feels),
+    tempPenalty(tmax),
+    tempPenalty(tmin)
+  );
+
+  // Wind
+  if (wind !== null) {
+    if      (wind >= 70) s -= w.wind.severe;
+    else if (wind >= 50) s -= w.wind.strong;
+    else if (wind >= 30) s -= w.wind.moderate;
+  }
+
+  // UV
+  if (uv !== null) {
+    if      (uv >= 11) s -= w.uv.extreme;
+    else if (uv >= 8)  s -= w.uv.veryHigh;
+    else if (uv >= 6)  s -= w.uv.high;
+  }
+
+  // Humidity
+  if (hum !== null) {
+    if      (hum >= 95) s -= w.humidity.veryHigh;
+    else if (hum >= 85) s -= w.humidity.high;
+  }
 
   // AQI
   const a = aq.aqi ?? 0;
