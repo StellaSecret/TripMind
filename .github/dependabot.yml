@@ -32,6 +32,11 @@ updates:
     labels: [dependencies, unit]
     commit-message:
       prefix: "chore(deps/unit)"
+    ignore:
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/coverage-v8"
+        update-types: ["version-update:semver-major"]
 
   # Android Gradle dependencies
   - package-ecosystem: gradle
