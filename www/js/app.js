@@ -109,8 +109,8 @@
       modeCarpool: 'Covoiturage', modeBike: 'Vélo', modeSubway: 'Métro',
       modeTram: 'Tram', modeFerry: 'Ferry', modePlane: 'Avion', modeTransit: 'Transport',
       /* Mode notes */
-      carFuelOnly: 'Carburant estimé (sans péages)',
-      carFuelToll: function(carb, peage) { return 'Carb. ~'+carb+'€ + péages ~'+peage+'€ (solo)'; },
+      carFuelOnly: function(carb, entretien) { return 'Carb. ~'+carb+'€ + entretien ~'+entretien+'€ (solo)'; },
+      carFuelToll: function(carb, peage, entretien) { return 'Carb. ~'+carb+'€ + péages ~'+peage+'€ + entretien ~'+entretien+'€ (solo)'; },
       trainRealtime: 'Transitous (temps réel)',
       trainEstim: 'Durée estimée',
       trainFareAvailable: 'Tarif disponible',
@@ -297,8 +297,8 @@
       modeCarpool: 'Carpool', modeBike: 'Bike', modeSubway: 'Metro',
       modeTram: 'Tram', modeFerry: 'Ferry', modePlane: 'Plane', modeTransit: 'Transit',
       /* Mode notes */
-      carFuelOnly: 'Est. fuel (no tolls)',
-      carFuelToll: function(carb, peage) { return 'Fuel ~€'+carb+' + tolls ~€'+peage+' (solo)'; },
+      carFuelOnly: function(carb, running) { return 'Fuel ~€'+carb+' + running ~€'+running+' (solo)'; },
+      carFuelToll: function(carb, peage, running) { return 'Fuel ~€'+carb+' + tolls ~€'+peage+' + running ~€'+running+' (solo)'; },
       trainRealtime: 'Transitous (real-time)',
       trainEstim: 'Estimated duration',
       trainFareAvailable: 'Fare available',
@@ -2434,32 +2434,33 @@
    * ─────────────────────────────────────────────────────────────────── */
   var MODE_COSTS = {
     car: {
-      fuelLPer100km:   7.0,   // average petrol car (ADEME 2024)
-      fuelEurPerL:     1.85,  // avg pump price France 2024 (UFIP)
-      tollEurPerKm:    0.09,  // autoroute avg (ASFA 2024); 0 below 80 km threshold
-      tollThresholdKm: 80,    // below this, toll usually negligible
-      co2gPerKm:       128,   // g CO₂/km, average new car (ADEME 2024)
+      fuelLPer100km:   7.0,   // average petrol car
+      fuelEurPerL:     1.85,  // planning estimate, France
+      runningEurPerKm: 0.12,  // maintenance, tyres and depreciation
+      tollEurPerKm:    0.09,  // autoroute average; 0 below threshold
+      tollThresholdKm: 80,
+      co2gPerKm:       128,   // g CO₂/km, average new car
     },
     train: {
       co2gPerKm:       1.7,   // g CO₂/km (SNCF 2023 bilan carbone)
-      terEurPerKm:     0.08,  // TER estimate
-      terMin:          8,
-      tgvEurPerKm:     0.12,  // TGV/Intercités estimate
-      tgvMin:          25,
-      tgvMax:          90,
+      terEurPerKm:     0.10,
+      terMin:          10,
+      tgvEurPerKm:     0.20,
+      tgvMin:          30,
+      tgvMax:          130,
       tgvThresholdKm:  150,   // below: TER pricing; above: TGV pricing
     },
     bus: {
       co2gPerKm:       29,    // g CO₂/km (ADEME long-distance coach)
-      eurPerKm:        0.05,  // FlixBus / BlaBlaCar Bus avg (2024)
-      minEur:          5,
+      eurPerKm:        0.07,
+      minEur:          8,
       durationFactor:  1.6,   // relative to car duration
       minDistKm:       15,
     },
     carpool: {
       co2gPerKm:       51,    // g CO₂/km per passenger (ADEME, 2 occupants avg)
-      eurPerKm:        0.06,  // BlaBlaCar avg per passenger (2024)
-      minEur:          5,
+      eurPerKm:        0.09,
+      minEur:          8,
       durationFactor:  1.1,
       minDistKm:       15,
     },
@@ -2478,11 +2479,12 @@
     var c = MODE_COSTS;
     var carburant   = Math.round(dist * c.car.fuelLPer100km / 100 * c.car.fuelEurPerL);
     var peages      = dist > c.car.tollThresholdKm ? Math.round(dist * c.car.tollEurPerKm) : 0;
-    var coutCarSolo = carburant + peages;
+    var entretien   = Math.round(dist * c.car.runningEurPerKm);
+    var coutCarSolo = carburant + peages + entretien;
     var co2Car      = Math.round(c.car.co2gPerKm * dist / 1000);
     var noteVoiture = peages > 0
-      ? t('carFuelToll')(carburant, peages)
-      : t('carFuelOnly');
+      ? t('carFuelToll')(carburant, peages, entretien)
+      : t('carFuelOnly')(carburant, entretien);
     modes.push({
       modeKey:'car', mode:t('modeCar'), icon:'🚗', duree:(rt&&rt.dur)||'—',
       cout:'~' + coutCarSolo + '€',
@@ -2515,7 +2517,7 @@
         ? Math.round(Math.max(c.train.terMin, dist * c.train.terEurPerKm))
         : Math.round(Math.min(c.train.tgvMax, Math.max(c.train.tgvMin, dist * c.train.tgvEurPerKm)));
       modes.push({
-        modeKey:'train', mode:'Train', icon:'🚆',
+        modeKey:'train', mode:t('modeTrain'), icon:'🚆',
         duree:fmtDur(Math.round(Math.max(20, dist * 0.45)) * 60),
         cout:'~' + coutTrain2 + '€',
         fib:88, co2kg:co2t2,
@@ -2526,7 +2528,7 @@
 
     if (dist > c.bus.minDistKm) {
       /* ── Bus / Car longue distance ──────────────────────────────────
-       * FlixBus, BlaBlaCar Bus : ~0.05€/km, min 5€
+       * FlixBus, BlaBlaCar Bus : ~0.07€/km, min 8€
        * ─────────────────────────────────────────────────────────────── */
       var co2b = +(c.bus.co2gPerKm * dist / 1000).toFixed(1);
       var coutBus = Math.round(Math.max(c.bus.minEur, dist * c.bus.eurPerKm));
@@ -2539,7 +2541,7 @@
       });
 
       /* ── Covoiturage ─────────────────────────────────────────────────
-       * BlaBlaCar : ~0.06€/km passager, min 5€
+       * BlaBlaCar : ~0.09€/km passager, min 8€
        * ─────────────────────────────────────────────────────────────── */
       var co2v = +(c.carpool.co2gPerKm * dist / 1000).toFixed(1);
       var coutCov = Math.round(Math.max(c.carpool.minEur, dist * c.carpool.eurPerKm));

@@ -167,6 +167,14 @@ test.describe('Tab: Trajet (route)', () => {
     expect(content).toContain('Autres itinéraires : 470 km · 4h15 / 480 km · 4h30');
   });
 
+  test('shows calibrated fallback mode costs', async ({ page }) => {
+    const content = await page.locator(SEL.tabContent).textContent();
+    expect(content).toContain('~157€');
+    expect(content).toContain('~92€');
+    expect(content).toContain('~32€');
+    expect(content).toContain('~42€');
+  });
+
   test('shows "Voiture" mode card', async ({ page }) => {
     await expect(page.locator(SEL.tabContent)).toContainText('Voiture');
   });
