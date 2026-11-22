@@ -37,6 +37,24 @@ export const SEL = {
   tabTrains:    '.tab[data-tab="trains"]',
 };
 
+function hourlyMock(values: Record<string, number>, days = 16) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const time: string[] = [];
+  for (let d = 0; d < days; d++) {
+    for (let h = 0; h < 24; h++) {
+      const dt = new Date(start);
+      dt.setDate(start.getDate() + d);
+      dt.setHours(h);
+      time.push(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(h)}:00`);
+    }
+  }
+  const hourly: Record<string, string[] | number[]> = { time };
+  for (const [key, value] of Object.entries(values)) hourly[key] = Array(time.length).fill(value);
+  return hourly;
+}
+
 // ── Navigation helpers ────────────────────────────────────────────────────────
 
 export async function gotoSearch(page: Page) {
@@ -101,6 +119,7 @@ export async function mockGoodConditions(page: Page) {
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
       current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, wind_speed_10m: 12, wind_gusts_10m: 22, weather_code: 0, cloud_cover: 10, visibility: 12000 },
+      hourly: hourlyMock({ temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, precipitation_probability: 10, precipitation: 0, snowfall: 0, weather_code: 0, cloud_cover: 10, visibility: 12000, wind_speed_10m: 15, wind_gusts_10m: 25, uv_index: 3 }, 16),
       daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(10), weather_code: Array(16).fill(0), wind_speed_10m_max: Array(16).fill(15), wind_gusts_10m_max: Array(16).fill(25), precipitation_sum: Array(16).fill(0), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(12000), daylight_duration: Array(16).fill(28800) }
     }})
   );
@@ -118,6 +137,7 @@ export async function mockRainProbabilityOnly(page: Page) {
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
       current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 77, wind_speed_10m: 12, wind_gusts_10m: 22, weather_code: 2, cloud_cover: 82, visibility: 9000 },
+      hourly: hourlyMock({ temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 77, precipitation_probability: 83, precipitation: 4, snowfall: 0, weather_code: 2, cloud_cover: 82, visibility: 9000, wind_speed_10m: 15, wind_gusts_10m: 25, uv_index: 3 }, 16),
       daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(83), weather_code: Array(16).fill(2), wind_speed_10m_max: Array(16).fill(15), wind_gusts_10m_max: Array(16).fill(25), precipitation_sum: Array(16).fill(4), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(9000), daylight_duration: Array(16).fill(28800) }
     }})
   );
@@ -135,6 +155,7 @@ export async function mockAverageConditions(page: Page) {
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
       current: { temperature_2m: 14, apparent_temperature: 11, relative_humidity_2m: 80, wind_speed_10m: 30, wind_gusts_10m: 45, weather_code: 61, cloud_cover: 90, visibility: 6000 },
+      hourly: hourlyMock({ temperature_2m: 14, apparent_temperature: 11, relative_humidity_2m: 80, precipitation_probability: 70, precipitation: 6, snowfall: 0, weather_code: 61, cloud_cover: 90, visibility: 6000, wind_speed_10m: 35, wind_gusts_10m: 50, uv_index: 7 }, 16),
       daily: { temperature_2m_max: Array(16).fill(16), temperature_2m_min: Array(16).fill(10), uv_index_max: Array(16).fill(7), precipitation_probability_max: Array(16).fill(70), weather_code: Array(16).fill(61), wind_speed_10m_max: Array(16).fill(35), wind_gusts_10m_max: Array(16).fill(50), precipitation_sum: Array(16).fill(6), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(6000), daylight_duration: Array(16).fill(28800) }
     }})
   );
@@ -152,6 +173,7 @@ export async function mockBadConditions(page: Page) {
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
       current: { temperature_2m: 38, apparent_temperature: 42, relative_humidity_2m: 95, wind_speed_10m: 70, wind_gusts_10m: 90, weather_code: 95, cloud_cover: 100, visibility: 3000 },
+      hourly: hourlyMock({ temperature_2m: 38, apparent_temperature: 42, relative_humidity_2m: 95, precipitation_probability: 95, precipitation: 20, snowfall: 0, weather_code: 95, cloud_cover: 100, visibility: 3000, wind_speed_10m: 80, wind_gusts_10m: 95, uv_index: 10 }, 16),
       daily: { temperature_2m_max: Array(16).fill(40), temperature_2m_min: Array(16).fill(30), uv_index_max: Array(16).fill(10), precipitation_probability_max: Array(16).fill(95), weather_code: Array(16).fill(95), wind_speed_10m_max: Array(16).fill(80), wind_gusts_10m_max: Array(16).fill(95), precipitation_sum: Array(16).fill(20), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(3000), daylight_duration: Array(16).fill(28800) }
     }})
   );
@@ -169,6 +191,7 @@ export async function mockOutOfRangeAqi(page: Page) {
   await page.route(/api\.open-meteo\.com\/v1\/forecast/, route =>
     route.fulfill({ json: {
       current: { temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, wind_speed_10m: 12, wind_gusts_10m: 22, weather_code: 0, cloud_cover: 10, visibility: 12000 },
+      hourly: hourlyMock({ temperature_2m: 20, apparent_temperature: 18, relative_humidity_2m: 55, precipitation_probability: 10, precipitation: 0, snowfall: 0, weather_code: 0, cloud_cover: 10, visibility: 12000, wind_speed_10m: 15, wind_gusts_10m: 25, uv_index: 3 }, 16),
       daily: { temperature_2m_max: Array(16).fill(22), temperature_2m_min: Array(16).fill(12), uv_index_max: Array(16).fill(3), precipitation_probability_max: Array(16).fill(10), weather_code: Array(16).fill(0), wind_speed_10m_max: Array(16).fill(15), wind_gusts_10m_max: Array(16).fill(25), precipitation_sum: Array(16).fill(0), snowfall_sum: Array(16).fill(0), visibility_mean: Array(16).fill(12000), daylight_duration: Array(16).fill(28800) }
     }})
   );

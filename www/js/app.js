@@ -383,6 +383,23 @@
   /* "HH:MM" string for the currently selected train departure time */
   function trainTimeStr() { return pad(selectedTrainHour) + ':' + pad(selectedTrainMinute); }
 
+  function effectiveHour(offset, hour, minute, nowHour, nowMinute) {
+    if (offset > 0) return hour;
+    return hour * 60 + minute <= nowHour * 60 + nowMinute ? nowHour : hour;
+  }
+
+  function hourlyIndex(times, date, hour, fallbackIndex) {
+    if (Array.isArray(times)) {
+      var i = times.indexOf(date + 'T' + pad(hour) + ':00');
+      if (i >= 0) return i;
+    }
+    return fallbackIndex;
+  }
+
+  function localDateStr(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
   /* Retourne le décalage en jours entre selectedDate et aujourd'hui */
   function dayOffset() {
     var today = new Date();
@@ -1339,18 +1356,25 @@
    * Récupère 16 jours de prévisions et extrait le jour voulu
    * via dayOffset().
    ──────────────────────────────────────────────────── */
-  function fetchMeteo(lat, lon) {
-    var offset = dayOffset();
+  function fetchMeteo(lat, lon, queryDate, queryHour, offset) {
     var url = 'https://api.open-meteo.com/v1/forecast?' +
       'latitude=' + lat + '&longitude=' + lon +
       '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code,cloud_cover,visibility' +
+      '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,precipitation,snowfall,weather_code,cloud_cover,visibility,wind_speed_10m,wind_gusts_10m,uv_index' +
       '&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,weather_code,wind_speed_10m_max,wind_gusts_10m_max,precipitation_sum,snowfall_sum,visibility_mean,daylight_duration' +
       '&timezone=auto&forecast_days=16';
 
     return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error((LANG==='en'?'Weather HTTP ':'Météo HTTP ') + r.status); return r.json(); })
       .then(function(d) {
-        var dy = d.daily;
+        var dy = d.daily, h = d.hourly || {}, c = d.current || {};
+        var hi = hourlyIndex(h.time, queryDate, queryHour, offset * 24 + queryHour);
+        var hv = function(name) {
+          var arr = h[name];
+          if (hi < 0 || !arr || hi >= arr.length) return null;
+          var v = arr[hi];
+          return (typeof v === 'number' && isFinite(v)) ? v : null;
+        };
         var rn = function(v) { return (typeof v === 'number' && isFinite(v)) ? Math.round(v) : null; };
         var maxRn = function(a, b) {
           var x = rn(a), y = rn(b);
@@ -1358,53 +1382,54 @@
         };
         var r1 = function(v) { return (typeof v === 'number' && isFinite(v)) ? Math.round(v * 10) / 10 : null; };
         var km = function(v) { return (typeof v === 'number' && isFinite(v)) ? r1(v / 1000) : null; };
-        if (offset === 0) {
-          // Aujourd'hui : données actuelles + prévisions daily
-          var c = d.current;
-          return {
-            temp: Math.round(c.temperature_2m), feels: Math.round(c.apparent_temperature),
-            humidity: Math.round(c.relative_humidity_2m),
-            wind: Math.max(Math.round(c.wind_speed_10m), Math.round(dy.wind_speed_10m_max[0])),
-            gust: maxRn(c.wind_gusts_10m, dy.wind_gusts_10m_max[0]),
-            code: c.weather_code, clouds: Math.round(c.cloud_cover),
-            tmax: Math.round(dy.temperature_2m_max[0]), tmin: Math.round(dy.temperature_2m_min[0]),
-            precipProb: dy.precipitation_probability_max[0],
-            precipMm: r1(dy.precipitation_sum[0]), snowCm: r1(dy.snowfall_sum[0]),
-            visibility: km(c.visibility),
-            daylight: dy.daylight_duration[0] != null ? r1(dy.daylight_duration[0] / 3600) : null,
-            uv: Math.round(dy.uv_index_max[0]),
-            isForecast: false
-          };
-        } else {
-          // Jour futur : uniquement les données daily (pas de current)
-          var i = offset;
-          return {
-            temp: Math.round((dy.temperature_2m_max[i] + dy.temperature_2m_min[i]) / 2),
-            feels: Math.round((dy.temperature_2m_max[i] + dy.temperature_2m_min[i]) / 2) - 2,
-            humidity: null,
-            wind: Math.round(dy.wind_speed_10m_max[i]),
-            gust: rn(dy.wind_gusts_10m_max[i]),
-            code: dy.weather_code[i],
-            clouds: null,
-            tmax: Math.round(dy.temperature_2m_max[i]),
-            tmin: Math.round(dy.temperature_2m_min[i]),
-            precipProb: dy.precipitation_probability_max[i],
-            precipMm: r1(dy.precipitation_sum[i]), snowCm: r1(dy.snowfall_sum[i]),
-            visibility: km(dy.visibility_mean[i]),
-            daylight: dy.daylight_duration[i] != null ? r1(dy.daylight_duration[i] / 3600) : null,
-            uv: Math.round(dy.uv_index_max[i]),
-            isForecast: true
-          };
-        }
+        var i = offset;
+        var avg = Math.round((dy.temperature_2m_max[i] + dy.temperature_2m_min[i]) / 2);
+        var temp = offset === 0 ? Math.round(c.temperature_2m) : avg;
+        var feels = offset === 0 ? Math.round(c.apparent_temperature) : avg - 2;
+        var humidity = offset === 0 ? Math.round(c.relative_humidity_2m) : null;
+        var wind = offset === 0
+          ? Math.max(Math.round(c.wind_speed_10m), Math.round(dy.wind_speed_10m_max[i]))
+          : Math.round(dy.wind_speed_10m_max[i]);
+        var gust = offset === 0
+          ? maxRn(c.wind_gusts_10m, dy.wind_gusts_10m_max[i])
+          : rn(dy.wind_gusts_10m_max[i]);
+        var code = offset === 0 ? c.weather_code : dy.weather_code[i];
+        var clouds = offset === 0 ? Math.round(c.cloud_cover) : null;
+        var precipProb = dy.precipitation_probability_max[i];
+        var precipMm = r1(dy.precipitation_sum[i]);
+        var snowCm = r1(dy.snowfall_sum[i]);
+        var visibility = offset === 0 ? km(c.visibility) : km(dy.visibility_mean[i]);
+        var uv = Math.round(dy.uv_index_max[i]);
+
+        var v = hv('temperature_2m'); if (v !== null) temp = Math.round(v);
+        v = hv('apparent_temperature'); if (v !== null) feels = Math.round(v);
+        v = hv('relative_humidity_2m'); if (v !== null) humidity = Math.round(v);
+        v = hv('wind_speed_10m'); if (v !== null) wind = Math.round(v);
+        v = hv('wind_gusts_10m'); if (v !== null) gust = Math.round(v);
+        v = hv('weather_code'); if (v !== null) code = v;
+        v = hv('cloud_cover'); if (v !== null) clouds = Math.round(v);
+        v = hv('precipitation_probability'); if (v !== null) precipProb = Math.round(v);
+        v = hv('precipitation'); if (v !== null) precipMm = r1(v);
+        v = hv('snowfall'); if (v !== null) snowCm = r1(v);
+        v = hv('visibility'); if (v !== null && km(v) !== null) visibility = km(v);
+        v = hv('uv_index'); if (v !== null) uv = Math.round(v);
+
+        return {
+          temp: temp, feels: feels, humidity: humidity, wind: wind, gust: gust,
+          code: code, clouds: clouds,
+          tmax: Math.round(dy.temperature_2m_max[i]), tmin: Math.round(dy.temperature_2m_min[i]),
+          precipProb: precipProb, precipMm: precipMm, snowCm: snowCm,
+          visibility: visibility,
+          daylight: dy.daylight_duration[i] != null ? r1(dy.daylight_duration[i] / 3600) : null,
+          uv: uv, isForecast: offset > 0
+        };
       });
   }
 
   /* ─── API : Qualité air Open-Meteo ─────────────────
-   * Pour les jours futurs, on prend l'heure 12:00 du jour voulu
-   * dans les données horaires (index = offset * 24 + 12).
+   * Lecture des données horaires à la date/heure de départ demandée.
    ──────────────────────────────────────────────────── */
-  function fetchAirQuality(lat, lon, inEurope) {
-    var offset = dayOffset();
+  function fetchAirQuality(lat, lon, inEurope, queryDate, queryHour, offset) {
     var inEU = (inEurope !== false) && isInEurope(lat, lon);
 
     // Choose AQI index: European EAQI inside Europe, US AQI elsewhere
@@ -1439,13 +1464,7 @@
           var v = safeVal(arr, idx); return v !== null ? (+v).toFixed(1) : null;
         }
 
-        // Index horaire cible : heure actuelle pour J+0, midi pour les autres
-        var hi = offset === 0
-          ? Math.min(new Date().getHours(), (h[aqiVar] || []).length - 1)
-          : Math.min(offset * 24 + 12, (h[aqiVar] || []).length - 1);
-
-        // Si l'index dépasse le tableau (données non disponibles pour ce jour),
-        // prendre le dernier index disponible avec un flag d'avertissement
+        var hi = hourlyIndex(h.time, queryDate, queryHour, offset * 24 + queryHour);
         var maxIdx = (h[aqiVar] || []).length - 1;
         var outOfRange = hi > maxIdx;
         hi = Math.max(0, Math.min(hi, maxIdx));
@@ -2792,6 +2811,9 @@
     var queryOffset  = dayOffset();
     var queryTimeStr = trainTimeStr();
     var queryDateLbl = dateLabel(selectedDate);
+    var queryDate    = localDateStr(selectedDate);
+    var queryHour    = effectiveHour(queryOffset, selectedTrainHour, selectedTrainMinute,
+                                     Math.floor(nowHourMin / 60), nowHourMin % 60);
     var cacheHour = (dayOffset() === 0 && chosenHourMin <= nowHourMin)
       ? ('now' + Math.floor(nowHourMin / 5)) // bucket by 5-min window
       : trainTimeStr();
@@ -2873,7 +2895,7 @@
     function stepMeteo(ctx) {
       setStep('s1', 'loading');
       $('lmsg').textContent = t('loadingMeteo');
-      return fetchMeteo(ctx.dGeo.lat, ctx.dGeo.lon)
+      return fetchMeteo(ctx.dGeo.lat, ctx.dGeo.lon, queryDate, queryHour, queryOffset)
         .then(function(m) { setStep('s1', 'done'); ctx.m = m; return ctx; })
         .catch(function() {
           setStep('s1', 'fail');
@@ -2885,7 +2907,8 @@
     function stepAirQuality(ctx) {
       setStep('s2', 'loading'); setStep('s3', 'loading');
       $('lmsg').textContent = t('loadingAir');
-      return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon, isInEurope(ctx.dGeo.lat, ctx.dGeo.lon))
+      return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon, isInEurope(ctx.dGeo.lat, ctx.dGeo.lon),
+                             queryDate, queryHour, queryOffset)
         .then(function(aq) { setStep('s2', 'done'); setStep('s3', 'done'); ctx.aq = aq; return ctx; })
         .catch(function() {
           setStep('s2', 'fail'); setStep('s3', 'fail');
