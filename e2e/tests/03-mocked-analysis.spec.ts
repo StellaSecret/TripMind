@@ -206,6 +206,13 @@ test.describe('Tab: Air & Pollen', () => {
     expect(content).toContain('SO₂');
     expect(content).toContain('CO');
   });
+
+  test('shows NH₃, dust and AOD readings', async ({ page }) => {
+    const content = await page.locator(SEL.tabContent).textContent();
+    expect(content).toContain('NH₃');
+    expect(content).toContain('Poussières');
+    expect(content).toContain('AOD');
+  });
 });
 
 // ── Tab: Santé ────────────────────────────────────────────────────────────────

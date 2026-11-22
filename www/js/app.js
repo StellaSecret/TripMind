@@ -196,6 +196,7 @@
       pm25: 'Particules fines', pm10: 'Particules grossières',
       no2: "Dioxyde d'azote", ozone: 'Ozone troposphérique',
       so2: 'Dioxyde de soufre', co: 'Monoxyde de carbone',
+      nh3: 'Ammoniac', dust: 'Poussières', aod: 'Profondeur optique des aérosols',
       pollutantsNA: 'Données polluants indisponibles',
       /* Score */
       scoreDetail: function(s) { return 'Score '+s+'/100 · météo + air + pollen'; },
@@ -378,6 +379,7 @@
       pm25: 'Fine particles', pm10: 'Coarse particles',
       no2: 'Nitrogen dioxide', ozone: 'Tropospheric ozone',
       so2: 'Sulfur dioxide', co: 'Carbon monoxide',
+      nh3: 'Ammonia', dust: 'Dust', aod: 'Aerosol optical depth',
       pollutantsNA: 'Pollutant data unavailable',
       /* Score */
       scoreDetail: function(s) { return 'Score '+s+'/100 · weather + air + pollen'; },
@@ -1500,7 +1502,7 @@
     var forecastDays = Math.min(offset + 2, 6);
     var url = 'https://air-quality-api.open-meteo.com/v1/air-quality?' +
       'latitude=' + lat + '&longitude=' + lon +
-      '&hourly=' + aqiVar + ',pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide' + pollenVars +
+      '&hourly=' + aqiVar + ',pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,ammonia,dust,aerosol_optical_depth' + pollenVars +
       '&timezone=auto&forecast_days=' + forecastDays;
 
     return fetchWithTimeout(url, {}, 8000)
@@ -1520,6 +1522,9 @@
         function safeFix(arr, idx) {
           var v = safeVal(arr, idx); return v !== null ? Math.round(v * 10) / 10 : null;
         }
+        function safeFix2(arr, idx) {
+          var v = safeVal(arr, idx); return v !== null ? Math.round(v * 100) / 100 : null;
+        }
 
         var hi = hourlyIndex(h.time, queryDate, queryHour, offset * 24 + queryHour);
         var maxIdx = (h[aqiVar] || []).length - 1;
@@ -1533,6 +1538,9 @@
         var o3   = safeFix(h.ozone, hi);
         var so2  = safeFix(h.sulphur_dioxide, hi);
         var co   = safeFix(h.carbon_monoxide, hi);
+        var nh3  = safeFix(h.ammonia, hi);
+        var dust = safeFix(h.dust, hi);
+        var aod  = safeFix2(h.aerosol_optical_depth, hi);
 
         var pn = t('pollenNames');
         var pollens = {}, polMax = 0, polActifs = [], polNiveau = {l:t('pollenNA'),c:'bb'};
@@ -1566,6 +1574,9 @@
           no2: outOfRange ? null : no2,
           so2: outOfRange ? null : so2,
           co: outOfRange ? null : co,
+          nh3: outOfRange ? null : nh3,
+          dust: outOfRange ? null : dust,
+          aod: outOfRange ? null : aod,
           pollens: pollenNotAvailable ? {} : pollens,
           polMax: pollenNotAvailable ? 0 : polMax,
           polActifs: pollenNotAvailable ? [] : polActifs,
@@ -2711,13 +2722,21 @@
       var polluants=[['PM₂.₅',aq.pm25,'μg/m³',25,t('pm25')],['PM₁₀',aq.pm10,'μg/m³',50,t('pm10')],
         ['NO₂',aq.no2,'μg/m³',40,t('no2')],['Ozone',aq.o3,'μg/m³',120,t('ozone')],
         ['SO₂',aq.so2,'μg/m³',40,t('so2')],['CO',aq.co,'μg/m³',4000,t('co')]];
-      polluantsHTML = polluants.map(function(p){
+      var scoredRows = polluants.map(function(p){
         if(p[1]==null) return '';
         var n=+p[1],col=n<p[3]*0.5?'#10B981':n<p[3]?'#F59E0B':'#EF4444';
         return '<div class="srow"><div class="d2" style="background:'+col+';box-shadow:0 0 5px '+col+'"></div>'+
           '<div style="flex:1"><div class="stxt">'+p[0]+' — '+p[1]+' '+p[2]+'</div>'+
           '<div class="ssub2">'+p[4]+'</div></div></div>';
-      }).join('') || '<div style="font-size:.72rem;color:var(--t3);padding:4px 0">'+t('pollutantsNA')+'</div>';
+      }).join('');
+      var extraPolluants=[['NH₃',aq.nh3,'μg/m³',t('nh3')],['Poussières',aq.dust,'μg/m³',t('dust')],['AOD',aq.aod,'',t('aod')]];
+      var extraRows = extraPolluants.map(function(p){
+        if(p[1]==null) return '';
+        return '<div class="srow"><div class="d2" style="background:#64748B;box-shadow:0 0 5px #64748B"></div>'+
+          '<div style="flex:1"><div class="stxt">'+p[0]+' — '+p[1]+(p[2]?' '+p[2]:'')+'</div>'+
+          '<div class="ssub2">'+p[3]+'</div></div></div>';
+      }).join('');
+      polluantsHTML = scoredRows+extraRows || '<div style="font-size:.72rem;color:var(--t3);padding:4px 0">'+t('pollutantsNA')+'</div>';
     }
 
     return (
@@ -3086,6 +3105,7 @@
 
     function defaultAirQuality() {
       return { aqi:null, pm25:null, pm10:null, o3:null, no2:null, so2:null, co:null,
+               nh3:null, dust:null, aod:null,
                pollens:{}, polMax:0, polActifs:[], polNiveau:{l:'—',c:'bb'} };
     }
 
