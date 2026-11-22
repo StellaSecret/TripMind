@@ -47,7 +47,7 @@ export interface AirInput {
   o3?: number | null;
 }
 
-export function calcScore(m: WeatherInput, aq: AirInput): number {
+function scoreOne(m: WeatherInput, aq: AirInput): number {
   let s = 100;
   const w = SCORE_WEIGHTS;
   const num = (v: unknown): number | null =>
@@ -183,6 +183,16 @@ export function calcScore(m: WeatherInput, aq: AirInput): number {
   return Math.max(5, Math.min(100, Math.round(s)));
 }
 
+export function calcScore(
+  m: WeatherInput,
+  aq: AirInput,
+  om?: WeatherInput | null,
+  oaq?: AirInput | null
+): number {
+  const own = scoreOne(m, aq);
+  return om && oaq ? Math.min(own, scoreOne(om, oaq)) : own;
+}
+
 export type RiskLevel = 'low' | 'moderate' | 'high';
 
 export interface RouteInput {
@@ -199,7 +209,7 @@ export const MODE_EXPOSURE = {
   car: 1, carpool: 1, bus: 0.9, bike: 1.2, train: 0.2,
 };
 
-export function calcTravelRisk(m: WeatherInput, rt?: RouteInput | null): TravelRisk {
+function hazardOf(m: WeatherInput): number {
   const num = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) ? v : null;
   const c = num(m.code);
@@ -228,6 +238,17 @@ export function calcTravelRisk(m: WeatherInput, rt?: RouteInput | null): TravelR
     if (dl < 4) hazard += 10;
     else if (dl < 8) hazard += 5;
   }
+  return hazard;
+}
+
+export function calcTravelRisk(
+  m: WeatherInput,
+  rt?: RouteInput | null,
+  om?: WeatherInput | null
+): TravelRisk {
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  let hazard = Math.max(hazardOf(m), om ? hazardOf(om) : 0);
 
   const durSec = num(rt && rt.durSec);
   if (durSec !== null) {
