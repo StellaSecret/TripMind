@@ -1566,9 +1566,37 @@
   }
 
   /* ─── API : OSRM ─────────────────────────────────── */
+  function routeMidpoint(rt) {
+    var coords = rt.geometry && rt.geometry.coordinates;
+    if (!coords || coords.length < 2) return null;
+    var segs = [];
+    (rt.legs || []).forEach(function(leg) {
+      var d = leg.annotation && leg.annotation.distance;
+      if (Array.isArray(d)) segs = segs.concat(d);
+    });
+    if (segs.length !== coords.length - 1) return null;
+    var total = 0, i;
+    for (i = 0; i < segs.length; i++) total += segs[i];
+    if (!(total > 0)) return null;
+    var half = total / 2, acc = 0;
+    for (i = 0; i < segs.length; i++) {
+      var seg = segs[i];
+      if (acc + seg >= half) {
+        var f = seg > 0 ? (half - acc) / seg : 0;
+        return {
+          lat: coords[i][1] + (coords[i + 1][1] - coords[i][1]) * f,
+          lon: coords[i][0] + (coords[i + 1][0] - coords[i][0]) * f
+        };
+      }
+      acc += seg;
+    }
+    return { lat: coords[coords.length - 1][1], lon: coords[coords.length - 1][0] };
+  }
+
   function fetchRoute(oLat, oLon, dLat, dLon) {
     var url = 'https://router.project-osrm.org/route/v1/driving/' +
-              oLon + ',' + oLat + ';' + dLon + ',' + dLat + '?overview=false&annotations=false';
+              oLon + ',' + oLat + ';' + dLon + ',' + dLat +
+              '?overview=full&geometries=geojson&annotations=distance&steps=false&alternatives=false';
     return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error('OSRM HTTP ' + r.status); return r.json(); })
       .then(function(d) {
@@ -1578,6 +1606,7 @@
           distKm: Math.round(distM / 1000),
           dist: distM >= 1000 ? Math.round(distM / 1000) + ' km' : Math.round(distM) + ' m',
           dur: fmtDur(rt.duration), durSec: rt.duration,
+          mid: routeMidpoint(rt),
           note: t('routeNote')  // translated: 'Durée théorique sans trafic (OSRM / OpenStreetMap)'
         };
       });
@@ -3081,8 +3110,12 @@
     }
 
     function stepMidpoint(ctx, midTime) {
-      var lat = (ctx.oGeo.lat + ctx.dGeo.lat) / 2;
-      var lon = (ctx.oGeo.lon + ctx.dGeo.lon) / 2;
+      var mid = (ctx.rt && ctx.rt.mid) || {
+        lat: (ctx.oGeo.lat + ctx.dGeo.lat) / 2,
+        lon: (ctx.oGeo.lon + ctx.dGeo.lon) / 2
+      };
+      var lat = mid.lat;
+      var lon = mid.lon;
       return Promise.all([
         fetchMeteo(lat, lon, midTime.date, midTime.hour, midTime.offset),
         fetchAirQuality(lat, lon, isInEurope(lat, lon), midTime.date, midTime.hour, midTime.offset)

@@ -76,7 +76,12 @@ function banParis(route: any) {
 function banLyon(route: any) {
   route.fulfill({ json: { features: [{ geometry: { coordinates: [4.8357, 45.7640] }, properties: { city: 'Lyon', name: 'Lyon', label: 'Lyon (69)', context: '69, Rhône, Auvergne-Rhône-Alpes' } }] } });
 }
-const OSRM_462 = { routes: [{ distance: 462000, duration: 14400 }] };
+const OSRM_462 = { routes: [{
+  distance: 462000,
+  duration: 14400,
+  geometry: { coordinates: [[2.3488, 48.8534], [3, 47], [4.8357, 45.764]] },
+  legs: [{ annotation: { distance: [300000, 162000] } }]
+}] };
 
 // ── Address-level BAN mocks (housenumber results) ────────────────────────────
 

@@ -47,6 +47,18 @@ test.describe('Score calculation — three thresholds', () => {
     const score = parseInt(txt!.match(/(\d+)\/100/)![1]);
     expect(score).toBeLessThan(50);
   });
+
+  test('weather is sampled at the OSRM route midpoint', async ({ page }) => {
+    const lats: number[] = [];
+    page.on('request', req => {
+      if (/api\.open-meteo\.com\/v1\/forecast/.test(req.url())) {
+        const lat = Number(new URL(req.url()).searchParams.get('latitude'));
+        if (Number.isFinite(lat)) lats.push(lat);
+      }
+    });
+    await runMockedAnalysis(page, mockGoodConditions);
+    expect(lats.some(lat => lat > 2.8 && lat < 2.9)).toBe(true);
+  });
 });
 
 // ── Dashboard header ──────────────────────────────────────────────────────────
