@@ -13,6 +13,10 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@vitest/coverage-v8": "4.1.11",
+    "vite": "7.3.8",
     "vitest": "4.1.11"
+  },
+  "overrides": {
+    "rollup": "npm:@rollup/wasm-node@4.68.8"
   }
 }
