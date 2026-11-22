@@ -80,7 +80,7 @@ const OSRM_462 = { routes: [{
   distance: 462000,
   duration: 14400,
   geometry: { coordinates: [[2.3488, 48.8534], [3, 47], [4.8357, 45.764]] },
-  legs: [{ annotation: { distance: [300000, 162000] } }]
+  legs: [{ annotation: { distance: [300000, 162000], speed: [6, 25] }, steps: [{ maneuver: { type: 'depart' } }].concat(Array.from({ length: 20 }, () => ({ maneuver: { type: 'turn' } }))).concat([{ maneuver: { type: 'arrive' } }]) }]
 }] };
 
 // ── Address-level BAN mocks (housenumber results) ────────────────────────────

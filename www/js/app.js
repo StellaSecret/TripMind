@@ -100,6 +100,7 @@
       routeCard: 'Itinéraire routier', routeEstim: ' estimé hors trafic',
       routeNote: 'Durée théorique sans trafic (OSRM / OpenStreetMap)',
       routeNA: 'Données routières indisponibles',
+      avgSpeed: 'Vitesse moyenne', slowSegments: 'Segments < 30 km/h', turnCount: 'Manœuvres',
       multiMode: 'Comparaison multi-modes',
       durLabel: '⏱ Durée', costLabel: '💶 Coût', co2Label: '🌍 CO₂',
       /* Mode labels */
@@ -178,6 +179,8 @@
       recoBestMode: function(name, score) { return 'Option la mieux notée : '+name+' ('+score+'/100).'; },
       recoTrainReal: function(duree, fare) { return 'Train observé : '+duree+' · '+fare+'.'; },
       recoCarNote: function(dur, dist) { return 'Voiture : '+dur+' pour '+dist+'.'; },
+      recoSlowRoute: function(pct) { return 'Itinéraire lent : '+pct+' % du trajet sous 30 km/h.'; },
+      recoTurns: function(n) { return 'Trajet avec '+n+' manœuvres — prévoir une conduite attentive.'; },
       recoTrainNote: 'Consultez SNCF Connect ou Vianavigo pour les horaires de trains',
       recoNA: 'Données routières indisponibles.',
       recoGood: 'Conditions généralement favorables pour ce trajet.',
@@ -283,6 +286,7 @@
       routeCard: 'Road route', routeEstim: ' estimated without traffic',
       routeNote: 'Theoretical duration without traffic (OSRM / OpenStreetMap)',
       routeNA: 'Road data unavailable',
+      avgSpeed: 'Average speed', slowSegments: 'Segments < 30 km/h', turnCount: 'Turns',
       multiMode: 'Multi-mode comparison',
       durLabel: '⏱ Duration', costLabel: '💶 Cost', co2Label: '🌍 CO₂',
       /* Mode labels */
@@ -361,6 +365,8 @@
       recoBestMode: function(name, score) { return 'Best-rated option: '+name+' ('+score+'/100).'; },
       recoTrainReal: function(duree, fare) { return 'Observed train: '+duree+' · '+fare+'.'; },
       recoCarNote: function(dur, dist) { return 'Car: '+dur+' for '+dist+'.'; },
+      recoSlowRoute: function(pct) { return 'Slow route: '+pct+'% of the trip below 30 km/h.'; },
+      recoTurns: function(n) { return 'Route with '+n+' turns — drive carefully.'; },
       recoTrainNote: 'Check SNCF Connect or Vianavigo for train timetables',
       recoNA: 'Road data unavailable.',
       recoGood: 'Generally favourable conditions for this trip.',
@@ -1615,20 +1621,54 @@
     return { lat: coords[coords.length - 1][1], lon: coords[coords.length - 1][0] };
   }
 
+  function routeStats(rt) {
+    var dists = [], speeds = [], hasSteps = false, turns = 0;
+    (rt.legs || []).forEach(function(leg) {
+      var a = leg.annotation || {};
+      if (Array.isArray(a.distance)) dists = dists.concat(a.distance);
+      if (Array.isArray(a.speed)) speeds = speeds.concat(a.speed);
+      if (Array.isArray(leg.steps)) {
+        hasSteps = true;
+        leg.steps.forEach(function(step) {
+          var type = step.maneuver && step.maneuver.type;
+          if (type && type !== 'depart' && type !== 'arrive') turns++;
+        });
+      }
+    });
+    if (!dists.length || dists.length !== speeds.length) {
+      return { avgKmh: null, slowPct: null, turns: hasSteps ? turns : null };
+    }
+    var total = 0, slow = 0, seconds = 0;
+    for (var i = 0; i < dists.length; i++) {
+      if (!(dists[i] > 0) || !(speeds[i] > 0)) {
+        return { avgKmh: null, slowPct: null, turns: hasSteps ? turns : null };
+      }
+      total += dists[i];
+      seconds += dists[i] / speeds[i];
+      if (speeds[i] * 3.6 < 30) slow += dists[i];
+    }
+    return {
+      avgKmh: seconds > 0 ? Math.round(total / seconds * 3.6) : null,
+      slowPct: total > 0 ? Math.round(slow / total * 100) : null,
+      turns: hasSteps ? turns : null
+    };
+  }
+
   function fetchRoute(oLat, oLon, dLat, dLon) {
     var url = 'https://router.project-osrm.org/route/v1/driving/' +
               oLon + ',' + oLat + ';' + dLon + ',' + dLat +
-              '?overview=full&geometries=geojson&annotations=distance&steps=false&alternatives=false';
+              '?overview=full&geometries=geojson&annotations=distance,speed&steps=true&alternatives=false';
     return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error('OSRM HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         if (!d.routes || !d.routes.length) throw new Error(LANG==='en'?'No route found':'Aucun itinéraire trouvé');
-        var rt = d.routes[0], distM = rt.distance;
+        var rt = d.routes[0], distM = rt.distance, rs = routeStats(rt);
         return {
           distKm: Math.round(distM / 1000),
           dist: distM >= 1000 ? Math.round(distM / 1000) + ' km' : Math.round(distM) + ' m',
           dur: fmtDur(rt.duration), durSec: rt.duration,
           mid: routeMidpoint(rt),
+          avgKmh: rs.avgKmh, slowPct: rs.slowPct, turns: rs.turns,
           note: t('routeNote')  // translated: 'Durée théorique sans trafic (OSRM / OpenStreetMap)'
         };
       });
@@ -2557,6 +2597,8 @@
 
     var alt=[];
     if (rt) alt.push(t('recoCarNote')(rt.dur, rt.dist));
+    if (rt && rt.slowPct!==null && rt.slowPct>=40) alt.push(t('recoSlowRoute')(rt.slowPct));
+    if (rt && rt.turns!==null && rt.turns>=20) alt.push(t('recoTurns')(rt.turns));
     var bm=(modes||[]).find(function(x){return x.best;});
     var trBest=bestTrainItinerary(trains);
     if (bm && bm.modeKey!=='car' && !(trBest && bm.modeKey==='train')) {
@@ -2662,6 +2704,9 @@
       '<div style="font-size:.7rem;color:var(--t2)">'+rt.dur+t('routeEstim')+'</div></div>'+
       '<div class="wstat"><div class="wsl">Durée</div><div class="wsv">'+rt.dur+'</div></div>'+
       '<div class="wstat"><div class="wsl">Distance</div><div class="wsv">'+rt.dist+'</div></div>'+
+      (rt.avgKmh!=null?'<div class="wstat"><div class="wsl">'+t('avgSpeed')+'</div><div class="wsv">'+rt.avgKmh+' km/h</div></div>':'')+
+      (rt.slowPct!=null?'<div class="wstat"><div class="wsl">'+t('slowSegments')+'</div><div class="wsv">'+rt.slowPct+' %</div></div>':'')+
+      (rt.turns!=null?'<div class="wstat"><div class="wsl">'+t('turnCount')+'</div><div class="wsv">'+rt.turns+'</div></div>':'')+
       (tr?'<div class="wstat"><div class="wsl">'+t('travelRisk')+'</div><div class="wsv" style="color:'+riskCol+'">'+t('risk'+tr.level.charAt(0).toUpperCase()+tr.level.slice(1))+' · '+tr.risk+'/100</div></div>':'')+
       '</div>'+
       '<div class="info-note">ℹ '+rt.note+'</div>';  // rt.note already uses t()

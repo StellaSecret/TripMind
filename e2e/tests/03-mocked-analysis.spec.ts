@@ -136,6 +136,8 @@ test.describe('Tab: Aperçu (overview)', () => {
     expect(content).toContain('À destination — Orage prévu');
     expect(content).toContain('Sur le trajet — Orage prévu');
     expect(content).toContain('Risque de trajet élevé');
+    expect(content).toContain('Itinéraire lent : 65 %');
+    expect(content).toContain('20 manœuvres');
   });
 });
 
@@ -150,6 +152,12 @@ test.describe('Tab: Trajet (route)', () => {
 
   test('shows 462 km from OSRM mock', async ({ page }) => {
     await expect(page.locator(SEL.tabContent)).toContainText('462');
+  });
+
+  test('shows OSRM speed and maneuver stats', async ({ page }) => {
+    await expect(page.locator(SEL.tabContent)).toContainText('29 km/h');
+    await expect(page.locator(SEL.tabContent)).toContainText('65 %');
+    await expect(page.locator(SEL.tabContent)).toContainText('20');
   });
 
   test('shows "Voiture" mode card', async ({ page }) => {
