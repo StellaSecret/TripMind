@@ -113,11 +113,12 @@ test.describe('Tab: Aperçu (overview)', () => {
     await expect(page.locator(SEL.tabContent)).toContainText('38°');
   });
 
-  test('advisories cover both trip endpoints and travel risk', async ({ page }) => {
+  test('advisories cover both endpoints, midpoint and travel risk', async ({ page }) => {
     await runMockedAnalysis(page, mockBadConditions);
     const content = await page.locator(SEL.tabContent).textContent();
     expect(content).toContain('Au départ — Orage prévu');
     expect(content).toContain('À destination — Orage prévu');
+    expect(content).toContain('Sur le trajet — Orage prévu');
     expect(content).toContain('Risque de trajet élevé');
   });
 });

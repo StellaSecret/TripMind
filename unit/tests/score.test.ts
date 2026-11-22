@@ -483,6 +483,12 @@ describe('calcTravelRisk — hazard and exposure', () => {
     expect(r.level).toBe('moderate');
   });
 
+  it('uses the worse midpoint hazard', () => {
+    const r = calcTravelRisk({ code: 0, temp: 20 }, null, null, { code: 95, temp: 20 });
+    expect(r.risk).toBe(30);
+    expect(r.level).toBe('moderate');
+  });
+
   it('car exposure is 5x train exposure', () => {
     expect(modeRisk(100, 'car')).toBe(100);
     expect(modeRisk(100, 'train')).toBe(20);
@@ -509,6 +515,15 @@ describe('calcScore — origin endpoint', () => {
   it('uses the worse endpoint air quality', () => {
     expect(calcScore({ code: 0, temp: 20 }, clearAQ,
                      { code: 0, temp: 20 }, { aqi: 150, polMax: 0 })).toBe(75);
+  });
+
+  it('uses the worse midpoint score', () => {
+    expect(calcScore({ code: 0, temp: 20 }, clearAQ, null, null,
+                     { code: 61, temp: 20 }, clearAQ)).toBe(88);
+  });
+
+  it('ignores a missing midpoint', () => {
+    expect(calcScore({ code: 0, temp: 20 }, clearAQ, null, null, null, null)).toBe(100);
   });
 });
 

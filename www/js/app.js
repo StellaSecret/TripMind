@@ -81,6 +81,7 @@
       windMax: 'Vent max', precip: 'Précip.', humidity: 'Humidité', clouds: 'Nuages',
       gust: 'Rafales', precipAmt: 'Pluie', snow: 'Neige', visibility: 'Visibilité', daylight: 'Ensoleillement',
       originWeather: 'Au départ', originAir: 'Air au départ',
+      midpointWeather: 'Sur le trajet', midpointAir: 'Air sur le trajet',
       travelRisk: 'Risque de trajet', riskLow: 'Faible', riskModerate: 'Modéré', riskHigh: 'Élevé',
       feelsLike: 'Ressenti ', feelsEst: 'Ressenti estimé ',
       minMax: 'min / max',
@@ -165,6 +166,7 @@
       recoPollenActive: function(s) { return 'Pollen actif : ' + s; },
       recoAtDeparture: 'Au départ — ',
       recoAtArrival: 'À destination — ',
+      recoEnRoute: 'Sur le trajet — ',
       recoRainAmount: function(v) { return 'Précipitations fortes ('+v+' mm) — protections imperméables'; },
       recoSnow: function(v) { return 'Neige ('+v+' cm) — chaussures adaptées et prudence'; },
       recoWind: function(v) { return 'Vent fort ('+v+' km/h) — limiter le vélo'; },
@@ -258,6 +260,7 @@
       windMax: 'Max wind', precip: 'Precip.', humidity: 'Humidity', clouds: 'Clouds',
       gust: 'Gusts', precipAmt: 'Rainfall', snow: 'Snow', visibility: 'Visibility', daylight: 'Daylight',
       originWeather: 'At departure', originAir: 'Air at departure',
+      midpointWeather: 'En route', midpointAir: 'Air en route',
       travelRisk: 'Travel risk', riskLow: 'Low', riskModerate: 'Moderate', riskHigh: 'High',
       feelsLike: 'Feels like ', feelsEst: 'Est. feels ',
       minMax: 'min / max',
@@ -342,6 +345,7 @@
       recoPollenActive: function(s) { return 'Active pollen: ' + s; },
       recoAtDeparture: 'At departure — ',
       recoAtArrival: 'At arrival — ',
+      recoEnRoute: 'En route — ',
       recoRainAmount: function(v) { return 'Heavy precipitation ('+v+' mm) — waterproof gear advised'; },
       recoSnow: function(v) { return 'Snow ('+v+' cm) — wear appropriate footwear'; },
       recoWind: function(v) { return 'Strong wind ('+v+' km/h) — avoid cycling'; },
@@ -2268,10 +2272,11 @@
     return { score: Math.max(5, Math.min(100, Math.round(s))) };
   }
 
-  function calcScore(m, aq, om, oaq) {
-    var own = scoreOne(m, aq).score;
-    var origin = (om && oaq) ? scoreOne(om, oaq).score : own;
-    return { score: Math.min(own, origin) };
+  function calcScore(m, aq, om, oaq, rm, raq) {
+    var scores = [scoreOne(m, aq).score];
+    if (om && oaq) scores.push(scoreOne(om, oaq).score);
+    if (rm && raq) scores.push(scoreOne(rm, raq).score);
+    return { score: Math.min.apply(null, scores) };
   }
 
   var MODE_EXPOSURE = { car:1, carpool:1, bus:0.9, bike:1.2, train:0.2 };
@@ -2301,9 +2306,9 @@
     return hazard;
   }
 
-  function calcTravelRisk(m, rt, om) {
+  function calcTravelRisk(m, rt, om, rm) {
     var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; };
-    var hazard = Math.max(hazardOf(m), om ? hazardOf(om) : 0);
+    var hazard = Math.max(hazardOf(m), om ? hazardOf(om) : 0, rm ? hazardOf(rm) : 0);
     var durSec = num(rt && rt.durSec);
     if (durSec !== null) {
       if (durSec >= 14400) hazard += 20;
@@ -2360,10 +2365,10 @@
     },
   };
 
-  function calcModes(rt, trains, m, om) {
+  function calcModes(rt, trains, m, om, rm) {
     var dist=(rt&&rt.distKm)||0, durSec=(rt&&rt.durSec)||0, modes=[];
     if (!dist) return modes;
-    var travelRisk = calcTravelRisk(m, rt, om).risk;
+    var travelRisk = calcTravelRisk(m, rt, om, rm).risk;
 
     var c = MODE_COSTS;
     var carburant   = Math.round(dist * c.car.fuelLPer100km / 100 * c.car.fuelEurPerL);
@@ -2488,10 +2493,11 @@
     return list.map(function(s){return label+s;});
   }
 
-  function buildReco(m, aq, om, oaq, rt, travelRisk, modes, trains) {
+  function buildReco(m, aq, om, oaq, rm, raq, rt, travelRisk, modes, trains) {
     var al=endpointRecos(m, aq, t('recoAtArrival'));
     if (om && oaq) al=al.concat(endpointRecos(om, oaq, t('recoAtDeparture')));
-    if (m.isForecast || (om && om.isForecast)) al.push(t('recoForecast')(dayOffset()));
+    if (rm && raq) al=al.concat(endpointRecos(rm, raq, t('recoEnRoute')));
+    if (m.isForecast || (om && om.isForecast) || (rm && rm.isForecast)) al.push(t('recoForecast')(dayOffset()));
     if (travelRisk && travelRisk.level==='high') al.push(t('recoRiskHigh'));
 
     var alt=[];
@@ -2556,6 +2562,8 @@
       (m.daylight!=null?'<div class="wstat"><div class="wsl">'+t('daylight')+'</div><div class="wsv" style="color:var(--t2)">'+m.daylight+' h</div></div>':'')+
       (DATA.om?'<div class="wstat"><div class="wsl">'+t('originWeather')+'</div><div class="wsv" style="color:var(--t2)">'+wmoIcon(DATA.om.code)+' '+DATA.om.temp+'° · '+DATA.om.precipProb+'%</div></div>':'')+
       (DATA.oaq&&DATA.oaq.aqi!=null?'<div class="wstat"><div class="wsl">'+t('originAir')+'</div><div class="wsv" style="color:var(--t2)">'+DATA.oaq.aqi+'</div></div>':'')+
+      (DATA.rm?'<div class="wstat"><div class="wsl">'+t('midpointWeather')+'</div><div class="wsv" style="color:var(--t2)">'+wmoIcon(DATA.rm.code)+' '+DATA.rm.temp+'° · '+DATA.rm.precipProb+'%</div></div>':'')+
+      (DATA.raq&&DATA.raq.aqi!=null?'<div class="wstat"><div class="wsl">'+t('midpointAir')+'</div><div class="wsv" style="color:var(--t2)">'+DATA.raq.aqi+'</div></div>':'')+
       (m.humidity!=null?'<div class="wstat"><div class="wsl">'+t('humidity')+'</div><div class="wsv" style="color:#06B6D4">'+m.humidity+'%</div></div>':'')+
       (m.clouds!=null?'<div class="wstat"><div class="wsl">'+t('clouds')+'</div><div class="wsv">'+m.clouds+'%</div></div>':'')+
       '<div class="wt2"><div class="wsl" style="margin-bottom:5px">UV '+m.uv+'/11 — <span style="color:'+uv.c+'">'+uv.l+'</span></div>'+
@@ -3072,6 +3080,23 @@
         .catch(function() { ctx.oaq = null; return ctx; });
     }
 
+    function stepMidpoint(ctx, midTime) {
+      var lat = (ctx.oGeo.lat + ctx.dGeo.lat) / 2;
+      var lon = (ctx.oGeo.lon + ctx.dGeo.lon) / 2;
+      return Promise.all([
+        fetchMeteo(lat, lon, midTime.date, midTime.hour, midTime.offset),
+        fetchAirQuality(lat, lon, isInEurope(lat, lon), midTime.date, midTime.hour, midTime.offset)
+      ]).then(function(results) {
+        ctx.rm = results[0];
+        ctx.raq = results[1];
+        return ctx;
+      }).catch(function() {
+        ctx.rm = null;
+        ctx.raq = null;
+        return ctx;
+      });
+    }
+
     function stepRoute(ctx) {
       setStep('s4', 'loading');
       $('lmsg').textContent = t('loadingRoute');
@@ -3099,11 +3124,12 @@
     }
 
     function stepRender(ctx) {
-      var scoreRes = calcScore(ctx.m, ctx.aq, ctx.om, ctx.oaq);
-      var travelRisk = calcTravelRisk(ctx.m, ctx.rt, ctx.om);
-      var modes    = calcModes(ctx.rt, ctx.trains || null, ctx.m, ctx.om);
-      var reco     = buildReco(ctx.m, ctx.aq, ctx.om, ctx.oaq, ctx.rt, travelRisk, modes, ctx.trains);
+      var scoreRes = calcScore(ctx.m, ctx.aq, ctx.om, ctx.oaq, ctx.rm, ctx.raq);
+      var travelRisk = calcTravelRisk(ctx.m, ctx.rt, ctx.om, ctx.rm);
+      var modes    = calcModes(ctx.rt, ctx.trains || null, ctx.m, ctx.om, ctx.rm);
+      var reco     = buildReco(ctx.m, ctx.aq, ctx.om, ctx.oaq, ctx.rm, ctx.raq, ctx.rt, travelRisk, modes, ctx.trains);
       DATA = { m: ctx.m, aq: ctx.aq, om: ctx.om || null, oaq: ctx.oaq || null,
+               rm: ctx.rm || null, raq: ctx.raq || null,
                rt: ctx.rt, trains: ctx.trains || null,
                reco: reco, modes: modes, scoreRes: scoreRes, travelRisk: travelRisk,
                oName: ctx.oGeo.name, dName: ctx.dGeo.name,
@@ -3153,11 +3179,14 @@
         ]).then(function() {
           var arr = arrivalTime(queryDate, queryHour, queryMinute,
                                 ctx.rt && ctx.rt.durSec, todayDate);
+          var midTime = arrivalTime(queryDate, queryHour, queryMinute,
+                                    Math.round((ctx.rt && ctx.rt.durSec || 0) / 120), todayDate);
           return Promise.all([
             settleStep(stepMeteo(ctx, arr),      STEP_TIMEOUT_MS, function() { ctx.m  = defaultMeteo(); return ctx; }),
             settleStep(stepAirQuality(ctx, arr), STEP_TIMEOUT_MS, function() { ctx.aq = defaultAirQuality(); return ctx; }),
             settleStep(stepOriginMeteo(ctx),     STEP_TIMEOUT_MS, function() { ctx.om = null; return ctx; }),
-            settleStep(stepOriginAir(ctx),       STEP_TIMEOUT_MS, function() { ctx.oaq = null; return ctx; })
+            settleStep(stepOriginAir(ctx),       STEP_TIMEOUT_MS, function() { ctx.oaq = null; return ctx; }),
+            settleStep(stepMidpoint(ctx, midTime), STEP_TIMEOUT_MS, function() { ctx.rm = null; ctx.raq = null; return ctx; })
           ]);
         }).then(function() { return ctx; });
       })

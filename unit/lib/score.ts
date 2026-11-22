@@ -187,10 +187,14 @@ export function calcScore(
   m: WeatherInput,
   aq: AirInput,
   om?: WeatherInput | null,
-  oaq?: AirInput | null
+  oaq?: AirInput | null,
+  rm?: WeatherInput | null,
+  raq?: AirInput | null
 ): number {
-  const own = scoreOne(m, aq);
-  return om && oaq ? Math.min(own, scoreOne(om, oaq)) : own;
+  const scores = [scoreOne(m, aq)];
+  if (om && oaq) scores.push(scoreOne(om, oaq));
+  if (rm && raq) scores.push(scoreOne(rm, raq));
+  return Math.min(...scores);
 }
 
 export type RiskLevel = 'low' | 'moderate' | 'high';
@@ -244,11 +248,12 @@ function hazardOf(m: WeatherInput): number {
 export function calcTravelRisk(
   m: WeatherInput,
   rt?: RouteInput | null,
-  om?: WeatherInput | null
+  om?: WeatherInput | null,
+  rm?: WeatherInput | null
 ): TravelRisk {
   const num = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) ? v : null;
-  let hazard = Math.max(hazardOf(m), om ? hazardOf(om) : 0);
+  let hazard = Math.max(hazardOf(m), om ? hazardOf(om) : 0, rm ? hazardOf(rm) : 0);
 
   const durSec = num(rt && rt.durSec);
   if (durSec !== null) {
