@@ -101,6 +101,7 @@
       routeNote: 'Durée théorique sans trafic (OSRM / OpenStreetMap)',
       routeNA: 'Données routières indisponibles',
       avgSpeed: 'Vitesse moyenne', slowSegments: 'Segments < 30 km/h', turnCount: 'Manœuvres',
+      routeAlternatives: 'Alternatives', altRoutesNote: 'Autres itinéraires :',
       multiMode: 'Comparaison multi-modes',
       durLabel: '⏱ Durée', costLabel: '💶 Coût', co2Label: '🌍 CO₂',
       /* Mode labels */
@@ -181,6 +182,7 @@
       recoCarNote: function(dur, dist) { return 'Voiture : '+dur+' pour '+dist+'.'; },
       recoSlowRoute: function(pct) { return 'Itinéraire lent : '+pct+' % du trajet sous 30 km/h.'; },
       recoTurns: function(n) { return 'Trajet avec '+n+' manœuvres — prévoir une conduite attentive.'; },
+      recoAltRoutes: function(n) { return n+' itinéraire(s) alternatif(s) disponible(s).'; },
       recoTrainNote: 'Consultez SNCF Connect ou Vianavigo pour les horaires de trains',
       recoNA: 'Données routières indisponibles.',
       recoGood: 'Conditions généralement favorables pour ce trajet.',
@@ -287,6 +289,7 @@
       routeNote: 'Theoretical duration without traffic (OSRM / OpenStreetMap)',
       routeNA: 'Road data unavailable',
       avgSpeed: 'Average speed', slowSegments: 'Segments < 30 km/h', turnCount: 'Turns',
+      routeAlternatives: 'Alternatives', altRoutesNote: 'Other routes:',
       multiMode: 'Multi-mode comparison',
       durLabel: '⏱ Duration', costLabel: '💶 Cost', co2Label: '🌍 CO₂',
       /* Mode labels */
@@ -367,6 +370,7 @@
       recoCarNote: function(dur, dist) { return 'Car: '+dur+' for '+dist+'.'; },
       recoSlowRoute: function(pct) { return 'Slow route: '+pct+'% of the trip below 30 km/h.'; },
       recoTurns: function(n) { return 'Route with '+n+' turns — drive carefully.'; },
+      recoAltRoutes: function(n) { return n+' alternative route(s) available.'; },
       recoTrainNote: 'Check SNCF Connect or Vianavigo for train timetables',
       recoNA: 'Road data unavailable.',
       recoGood: 'Generally favourable conditions for this trip.',
@@ -1621,6 +1625,10 @@
     return { lat: coords[coords.length - 1][1], lon: coords[coords.length - 1][0] };
   }
 
+  function fmtRouteDist(distM) {
+    return distM >= 1000 ? Math.round(distM / 1000) + ' km' : Math.round(distM) + ' m';
+  }
+
   function routeStats(rt) {
     var dists = [], speeds = [], hasSteps = false, turns = 0;
     (rt.legs || []).forEach(function(leg) {
@@ -1657,18 +1665,22 @@
   function fetchRoute(oLat, oLon, dLat, dLon) {
     var url = 'https://router.project-osrm.org/route/v1/driving/' +
               oLon + ',' + oLat + ';' + dLon + ',' + dLat +
-              '?overview=full&geometries=geojson&annotations=distance,speed&steps=true&alternatives=false';
+               '?overview=full&geometries=geojson&annotations=distance,speed&steps=true&alternatives=3';
     return fetchWithTimeout(url, {}, 8000)
       .then(function(r) { if (!r.ok) throw new Error('OSRM HTTP ' + r.status); return r.json(); })
       .then(function(d) {
         if (!d.routes || !d.routes.length) throw new Error(LANG==='en'?'No route found':'Aucun itinéraire trouvé');
         var rt = d.routes[0], distM = rt.distance, rs = routeStats(rt);
+        var alternatives = d.routes.slice(1).map(function(a) {
+          return { dist: fmtRouteDist(a.distance), dur: fmtDur(a.duration) };
+        });
         return {
           distKm: Math.round(distM / 1000),
-          dist: distM >= 1000 ? Math.round(distM / 1000) + ' km' : Math.round(distM) + ' m',
+          dist: fmtRouteDist(distM),
           dur: fmtDur(rt.duration), durSec: rt.duration,
           mid: routeMidpoint(rt),
           avgKmh: rs.avgKmh, slowPct: rs.slowPct, turns: rs.turns,
+          alternatives: alternatives, altCount: alternatives.length,
           note: t('routeNote')  // translated: 'Durée théorique sans trafic (OSRM / OpenStreetMap)'
         };
       });
@@ -2599,6 +2611,7 @@
     if (rt) alt.push(t('recoCarNote')(rt.dur, rt.dist));
     if (rt && rt.slowPct!==null && rt.slowPct>=40) alt.push(t('recoSlowRoute')(rt.slowPct));
     if (rt && rt.turns!==null && rt.turns>=20) alt.push(t('recoTurns')(rt.turns));
+    if (rt && rt.altCount>0) alt.push(t('recoAltRoutes')(rt.altCount));
     var bm=(modes||[]).find(function(x){return x.best;});
     var trBest=bestTrainItinerary(trains);
     if (bm && bm.modeKey!=='car' && !(trBest && bm.modeKey==='train')) {
@@ -2707,9 +2720,11 @@
       (rt.avgKmh!=null?'<div class="wstat"><div class="wsl">'+t('avgSpeed')+'</div><div class="wsv">'+rt.avgKmh+' km/h</div></div>':'')+
       (rt.slowPct!=null?'<div class="wstat"><div class="wsl">'+t('slowSegments')+'</div><div class="wsv">'+rt.slowPct+' %</div></div>':'')+
       (rt.turns!=null?'<div class="wstat"><div class="wsl">'+t('turnCount')+'</div><div class="wsv">'+rt.turns+'</div></div>':'')+
+      (rt.altCount>0?'<div class="wstat"><div class="wsl">'+t('routeAlternatives')+'</div><div class="wsv">'+rt.altCount+'</div></div>':'')+
       (tr?'<div class="wstat"><div class="wsl">'+t('travelRisk')+'</div><div class="wsv" style="color:'+riskCol+'">'+t('risk'+tr.level.charAt(0).toUpperCase()+tr.level.slice(1))+' · '+tr.risk+'/100</div></div>':'')+
       '</div>'+
-      '<div class="info-note">ℹ '+rt.note+'</div>';  // rt.note already uses t()
+      '<div class="info-note">ℹ '+rt.note+'</div>'+
+      (rt.altCount>0?'<div class="info-note">ℹ '+t('altRoutesNote')+' '+rt.alternatives.map(function(a){return a.dist+' · '+a.dur;}).join(' / ')+'</div>':'');  // rt.note already uses t()
     return (
       '<div class="card"><div class="ch"><span class="ct">'+t('routeCard')+'</span><span class="src-tag">OSRM · OSM</span></div><div class="cb">'+rtH+'</div></div>'+
       '<div class="card"><div class="ch"><span class="ct">'+t('multiMode')+'</span></div><div class="cb">'+

@@ -138,6 +138,7 @@ test.describe('Tab: Aperçu (overview)', () => {
     expect(content).toContain('Risque de trajet élevé');
     expect(content).toContain('Itinéraire lent : 65 %');
     expect(content).toContain('20 manœuvres');
+    expect(content).toContain('2 itinéraire(s) alternatif(s) disponible(s).');
   });
 });
 
@@ -158,6 +159,12 @@ test.describe('Tab: Trajet (route)', () => {
     await expect(page.locator(SEL.tabContent)).toContainText('29 km/h');
     await expect(page.locator(SEL.tabContent)).toContainText('65 %');
     await expect(page.locator(SEL.tabContent)).toContainText('20');
+  });
+
+  test('shows OSRM alternative routes', async ({ page }) => {
+    const content = await page.locator(SEL.tabContent).textContent();
+    expect(content).toMatch(/Alternatives\s*2/);
+    expect(content).toContain('Autres itinéraires : 470 km · 4h15 / 480 km · 4h30');
   });
 
   test('shows "Voiture" mode card', async ({ page }) => {
