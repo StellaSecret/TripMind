@@ -2326,10 +2326,10 @@
     // Air quality: use the worse of AQI and individual pollutant thresholds.
     var a = aq.aqi || 0;
     var airPenalty = 0;
-    if      (a > 100) airPenalty = w.aqi.veryPoor;
-    else if (a > 80)  airPenalty = w.aqi.poor;
-    else if (a > 60)  airPenalty = w.aqi.moderate;
-    else if (a > 40)  airPenalty = w.aqi.fair;
+    var aqiBands = window.TRIPMIND_CONSTANTS.AQI_BANDS[aq.aqiType === 'US' ? 'US' : 'EU'];
+    for (var bi = 0; bi < aqiBands.length; bi++) {
+      if (a > aqiBands[bi].min) { airPenalty = w.aqi[aqiBands[bi].level]; break; }
+    }
 
     var pollutantPenalty = function(v, high, medium, low) {
       if (typeof v !== 'number' || !isFinite(v)) return 0;

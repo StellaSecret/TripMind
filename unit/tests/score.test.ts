@@ -337,6 +337,26 @@ describe('calcScore — AQI penalties', () => {
     expect(calcScore(clearWeather, { aqi: 101, polMax: 0 })).toBe(75);
   });
 
+  it('US AQI 50 → no penalty', () => {
+    expect(calcScore(clearWeather, { aqi: 50, aqiType: 'US', polMax: 0 })).toBe(100);
+  });
+
+  it('US AQI 51 → fair (-3)', () => {
+    expect(calcScore(clearWeather, { aqi: 51, aqiType: 'US', polMax: 0 })).toBe(97);
+  });
+
+  it('US AQI 101 → moderate (-8)', () => {
+    expect(calcScore(clearWeather, { aqi: 101, aqiType: 'US', polMax: 0 })).toBe(92);
+  });
+
+  it('US AQI 151 → poor (-15)', () => {
+    expect(calcScore(clearWeather, { aqi: 151, aqiType: 'US', polMax: 0 })).toBe(85);
+  });
+
+  it('US AQI 201 → very poor (-25)', () => {
+    expect(calcScore(clearWeather, { aqi: 201, aqiType: 'US', polMax: 0 })).toBe(75);
+  });
+
   it('null AQI treated as 0', () => {
     expect(calcScore(clearWeather, { aqi: null, polMax: 0 })).toBe(100);
   });

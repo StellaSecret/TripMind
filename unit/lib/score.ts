@@ -26,6 +26,7 @@ export interface WeatherInput {
 
 export interface AirInput {
   aqi: number | null;
+  aqiType?: 'EU' | 'US' | null;
   polMax: number;
   pm25?: number | null;
   pm10?: number | null;
@@ -158,10 +159,9 @@ function scoreOne(m: WeatherInput, aq: AirInput): number {
   // Air quality: use the worse of AQI and individual pollutant thresholds.
   const a = aq.aqi ?? 0;
   let airPenalty = 0;
-  if      (a > 100) airPenalty = w.aqi.veryPoor;
-  else if (a > 80)  airPenalty = w.aqi.poor;
-  else if (a > 60)  airPenalty = w.aqi.moderate;
-  else if (a > 40)  airPenalty = w.aqi.fair;
+  const bands = AQI_BANDS[aq.aqiType === 'US' ? 'US' : 'EU'];
+  const band = bands.find((b) => a > b.min);
+  if (band) airPenalty = w.aqi[band.level];
 
   const pollutantPenalty = (v: number | null | undefined, high: number, medium: number, low: number): number => {
     // Stryker disable next-line ConditionalExpression,LogicalOperator: finite-number guard
