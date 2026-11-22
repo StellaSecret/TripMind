@@ -366,6 +366,18 @@ describe('calcScore — individual pollutant penalties', () => {
     expect(calcScore(clearWeather, { ...clearAQ, co: 10000 })).toBe(92);
   });
 
+  it('NH3 50 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, nh3: 50 })).toBe(92);
+  });
+
+  it('dust 200 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, dust: 200 })).toBe(92);
+  });
+
+  it('AOD 1.5 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, aod: 1.5 })).toBe(92);
+  });
+
   it('AQI and pollutant use the worse penalty, not a sum', () => {
     expect(calcScore(clearWeather, { aqi: 150, polMax: 0, pm25: 50 })).toBe(75);
   });

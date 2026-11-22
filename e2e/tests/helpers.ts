@@ -189,7 +189,7 @@ export async function mockBadConditions(page: Page) {
     }})
   );
   await page.route(/air-quality-api\.open-meteo\.com/, route =>
-    route.fulfill({ json: { hourly: { european_aqi: Array(48).fill(150), pm2_5: Array(48).fill(50), pm10: Array(48).fill(80), nitrogen_dioxide: Array(48).fill(60), ozone: Array(48).fill(180), alder_pollen: Array(48).fill(0), birch_pollen: Array(48).fill(0), grass_pollen: Array(48).fill(250), mugwort_pollen: Array(48).fill(100), olive_pollen: Array(48).fill(0), ragweed_pollen: Array(48).fill(1), sulphur_dioxide: Array(48).fill(5), carbon_monoxide: Array(48).fill(300), ammonia: Array(48).fill(3), dust: Array(48).fill(12), aerosol_optical_depth: Array(48).fill(0.25) } }})
+    route.fulfill({ json: { hourly: { european_aqi: Array(48).fill(150), pm2_5: Array(48).fill(50), pm10: Array(48).fill(80), nitrogen_dioxide: Array(48).fill(60), ozone: Array(48).fill(180), alder_pollen: Array(48).fill(0), birch_pollen: Array(48).fill(0), grass_pollen: Array(48).fill(250), mugwort_pollen: Array(48).fill(100), olive_pollen: Array(48).fill(0), ragweed_pollen: Array(48).fill(1), sulphur_dioxide: Array(48).fill(5), carbon_monoxide: Array(48).fill(300), ammonia: Array(48).fill(25), dust: Array(48).fill(120), aerosol_optical_depth: Array(48).fill(1.2) } }})
   );
   await page.route(/router\.project-osrm\.org/, route => route.fulfill({ json: OSRM_462 }));
   await page.route(/api\.transitous\.org/, route => route.fulfill({ json: TRAINS_EMPTY }));

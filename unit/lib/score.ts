@@ -47,6 +47,9 @@ export interface AirInput {
   o3?: number | null;
   so2?: number | null;
   co?: number | null;
+  nh3?: number | null;
+  dust?: number | null;
+  aod?: number | null;
 }
 
 function scoreOne(m: WeatherInput, aq: AirInput): number {
@@ -174,7 +177,10 @@ function scoreOne(m: WeatherInput, aq: AirInput): number {
     pollutantPenalty(aq.no2, 40, 25, 15),
     pollutantPenalty(aq.o3, 120, 100, 80),
     pollutantPenalty(aq.so2, 125, 80, 40),
-    pollutantPenalty(aq.co, 10000, 6000, 4000)
+    pollutantPenalty(aq.co, 10000, 6000, 4000),
+    pollutantPenalty(aq.nh3, 50, 20, 10),
+    pollutantPenalty(aq.dust, 200, 100, 50),
+    pollutantPenalty(aq.aod, 1.5, 1, 0.5)
   );
   s -= airPenalty;
 

@@ -139,6 +139,9 @@ test.describe('Tab: Aperçu (overview)', () => {
     expect(content).toContain('Itinéraire lent : 65 %');
     expect(content).toContain('20 manœuvres');
     expect(content).toContain('2 itinéraire(s) alternatif(s) disponible(s).');
+    expect(content).toContain('Ammoniac élevé (25 μg/m³)');
+    expect(content).toContain('Poussières élevées (120 μg/m³)');
+    expect(content).toContain('Aérosols atmosphériques élevés (AOD 1.2)');
   });
 });
 

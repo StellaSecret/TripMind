@@ -159,6 +159,9 @@
       recoAqiMed: function(v) { return "Qualité air médiocre (AQI "+v+") — limitez l'effort"; },
       recoSo2: function(v) { return 'Dioxyde de soufre élevé ('+v+' μg/m³) — limitez l’effort'; },
       recoCo: function(v) { return 'Monoxyde de carbone élevé ('+v+' μg/m³) — évitez les zones saturées'; },
+      recoNh3: function(v) { return 'Ammoniac élevé ('+v+' μg/m³) — aérez et limitez l’exposition'; },
+      recoDust: function(v) { return 'Poussières élevées ('+v+' μg/m³) — masque conseillé'; },
+      recoAod: function(v) { return 'Aérosols atmosphériques élevés (AOD '+v+') — limitez les efforts en extérieur'; },
       recoStorm: 'Orage prévu — reportez si possible',
       recoRainHeavy: 'Averses fortes — imperméable recommandé',
       recoRain: 'Pluie — pensez à votre imperméable',
@@ -347,6 +350,9 @@
       recoAqiMed: function(v) { return 'Moderate air quality (AQI '+v+') — avoid intense outdoor effort'; },
       recoSo2: function(v) { return 'High sulfur dioxide ('+v+' μg/m³) — limit exertion'; },
       recoCo: function(v) { return 'High carbon monoxide ('+v+' μg/m³) — avoid congested areas'; },
+      recoNh3: function(v) { return 'High ammonia ('+v+' μg/m³) — ventilate and limit exposure'; },
+      recoDust: function(v) { return 'High dust ('+v+' μg/m³) — mask advised'; },
+      recoAod: function(v) { return 'High aerosol optical depth (AOD '+v+') — limit outdoor exertion'; },
       recoStorm: 'Thunderstorm forecast — postpone if possible',
       recoRainHeavy: 'Heavy showers — waterproof jacket recommended',
       recoRain: 'Rain forecast — bring a raincoat',
@@ -2364,7 +2370,10 @@
       pollutantPenalty(aq.no2, 40, 25, 15),
       pollutantPenalty(aq.o3, 120, 100, 80),
       pollutantPenalty(aq.so2, 125, 80, 40),
-      pollutantPenalty(aq.co, 10000, 6000, 4000)
+      pollutantPenalty(aq.co, 10000, 6000, 4000),
+      pollutantPenalty(aq.nh3, 50, 20, 10),
+      pollutantPenalty(aq.dust, 200, 100, 50),
+      pollutantPenalty(aq.aod, 1.5, 1, 0.5)
     );
     s -= airPenalty;
 
@@ -2586,6 +2595,9 @@
     else if (num(aq.aqi)>60) list.push(t('recoAqiMed')(aq.aqi));
     if (num(aq.so2)>=125) list.push(t('recoSo2')(aq.so2));
     if (num(aq.co)>=10000) list.push(t('recoCo')(aq.co));
+    if (num(aq.nh3)>=20) list.push(t('recoNh3')(aq.nh3));
+    if (num(aq.dust)>=100) list.push(t('recoDust')(aq.dust));
+    if (num(aq.aod)>=1) list.push(t('recoAod')(aq.aod));
     if (c!==null && c>=95) list.push(t('recoStorm'));
     else if (num(m.precipMm)>=10) list.push(t('recoRainAmount')(m.precipMm));
     else if (c!==null && c>=80) list.push(t('recoRainHeavy'));
@@ -2783,7 +2795,9 @@
     } else {
       var polluants=[['PM₂.₅',aq.pm25,'μg/m³',25,t('pm25')],['PM₁₀',aq.pm10,'μg/m³',50,t('pm10')],
         ['NO₂',aq.no2,'μg/m³',40,t('no2')],['Ozone',aq.o3,'μg/m³',120,t('ozone')],
-        ['SO₂',aq.so2,'μg/m³',40,t('so2')],['CO',aq.co,'μg/m³',4000,t('co')]];
+        ['SO₂',aq.so2,'μg/m³',40,t('so2')],['CO',aq.co,'μg/m³',4000,t('co')],
+        ['NH₃',aq.nh3,'μg/m³',10,t('nh3')],['Poussières',aq.dust,'μg/m³',50,t('dust')],
+        ['AOD',aq.aod,'',0.5,t('aod')]];
       var scoredRows = polluants.map(function(p){
         if(p[1]==null) return '';
         var n=+p[1],col=n<p[3]*0.5?'#10B981':n<p[3]?'#F59E0B':'#EF4444';
@@ -2791,14 +2805,7 @@
           '<div style="flex:1"><div class="stxt">'+p[0]+' — '+p[1]+' '+p[2]+'</div>'+
           '<div class="ssub2">'+p[4]+'</div></div></div>';
       }).join('');
-      var extraPolluants=[['NH₃',aq.nh3,'μg/m³',t('nh3')],['Poussières',aq.dust,'μg/m³',t('dust')],['AOD',aq.aod,'',t('aod')]];
-      var extraRows = extraPolluants.map(function(p){
-        if(p[1]==null) return '';
-        return '<div class="srow"><div class="d2" style="background:#64748B;box-shadow:0 0 5px #64748B"></div>'+
-          '<div style="flex:1"><div class="stxt">'+p[0]+' — '+p[1]+(p[2]?' '+p[2]:'')+'</div>'+
-          '<div class="ssub2">'+p[3]+'</div></div></div>';
-      }).join('');
-      polluantsHTML = scoredRows+extraRows || '<div style="font-size:.72rem;color:var(--t3);padding:4px 0">'+t('pollutantsNA')+'</div>';
+      polluantsHTML = scoredRows || '<div style="font-size:.72rem;color:var(--t3);padding:4px 0">'+t('pollutantsNA')+'</div>';
     }
 
     return (
