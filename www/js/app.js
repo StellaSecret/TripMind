@@ -109,7 +109,13 @@
       carFuelOnly: 'Carburant estimé (sans péages)',
       carFuelToll: function(carb, peage) { return 'Carb. ~'+carb+'€ + péages ~'+peage+'€ (solo)'; },
       trainRealtime: 'Transitous (temps réel)',
-      trainEstim: 'Durée & prix estimés',
+      trainEstim: 'Durée estimée',
+      trainFareAvailable: 'Tarif disponible',
+      trainFareUnknown: 'Tarif non communiqué',
+      trainDelayed: function(min) { return 'Retard +'+min+' min'; },
+      trainOnTime: 'À l\'heure',
+      trainScheduled: 'Horaires théoriques',
+      trainCancelled: 'Supprimé',
       busEstim: 'Estimation FlixBus / BlaBlaCar Bus',
       carpoolEstim: 'Estimation BlaBlaCar',
       bikeSpeed: '~15 km/h moy.',
@@ -270,7 +276,13 @@
       carFuelOnly: 'Est. fuel (no tolls)',
       carFuelToll: function(carb, peage) { return 'Fuel ~€'+carb+' + tolls ~€'+peage+' (solo)'; },
       trainRealtime: 'Transitous (real-time)',
-      trainEstim: 'Est. duration & price',
+      trainEstim: 'Estimated duration',
+      trainFareAvailable: 'Fare available',
+      trainFareUnknown: 'Fare not provided',
+      trainDelayed: function(min) { return 'Delay +'+min+' min'; },
+      trainOnTime: 'On time',
+      trainScheduled: 'Scheduled times',
+      trainCancelled: 'Cancelled',
       busEstim: 'Est. FlixBus / BlaBlaCar Bus',
       carpoolEstim: 'Est. BlaBlaCar',
       bikeSpeed: '~15 km/h avg.',
@@ -1495,15 +1507,17 @@
         var pollenNotAvailable = !inEU; // pollen data only in Europe
 
         if (inEU && h.alder_pollen) {
+          var pollenArrays = [h.alder_pollen, h.birch_pollen, h.grass_pollen,
+                              h.mugwort_pollen, h.olive_pollen];
           pollens[pn.Aulne]     = safeRound(h.alder_pollen, hi)  || 0;
           pollens[pn.Bouleau]   = safeRound(h.birch_pollen, hi)  || 0;
           pollens[pn.Graminées] = safeRound(h.grass_pollen, hi)  || 0;
           pollens[pn.Armoise]   = safeRound(h.mugwort_pollen, hi)|| 0;
           pollens[pn.Olivier]   = safeRound(h.olive_pollen, hi)  || 0;
+          pollenNotAvailable = !pollenArrays.some(function(arr) { return safeVal(arr, hi) !== null; });
           polMax = Math.max.apply(null, Object.values(pollens));
           polActifs = Object.keys(pollens).filter(function(k) { return pollens[k] > 2; });
-          polNiveau = outOfRange
-            ? {l:t('pollenNA'),c:'bb'}
+          polNiveau = pollenNotAvailable ? {l:t('pollenNA'),c:'bb'}
             : polMax < 10  ? {l:t('pollenFaible'),c:'bg'}
             : polMax < 50  ? {l:t('pollenModere'),c:'ba'}
             : polMax < 200 ? {l:t('pollenEleve'),c:'ba'}
@@ -1517,9 +1531,9 @@
           pm10: outOfRange ? null : pm10,
           o3: outOfRange ? null : o3,
           no2: outOfRange ? null : no2,
-          pollens: (outOfRange || pollenNotAvailable) ? {} : pollens,
-          polMax: (outOfRange || pollenNotAvailable) ? 0 : polMax,
-          polActifs: (outOfRange || pollenNotAvailable) ? [] : polActifs,
+          pollens: pollenNotAvailable ? {} : pollens,
+          polMax: pollenNotAvailable ? 0 : polMax,
+          polActifs: pollenNotAvailable ? [] : polActifs,
           polNiveau: polNiveau,
           outOfRange: outOfRange,
           pollenNotAvailable: pollenNotAvailable
@@ -1696,6 +1710,64 @@
     return merged;
   }
 
+  function legDelayMin(l) {
+    var pairs = [
+      [l.startTime, l.scheduledStartTime],
+      [l.endTime, l.scheduledEndTime],
+      [l.from && l.from.departure, l.from && l.from.scheduledDeparture],
+      [l.to && l.to.arrival, l.to && l.to.scheduledArrival]
+    ];
+    var max = 0;
+    pairs.forEach(function(p) {
+      if (!p[0] || !p[1]) return;
+      var min = Math.round((new Date(p[0]) - new Date(p[1])) / 60000);
+      if (min > max) max = min;
+    });
+    return max;
+  }
+
+  function isTransitLeg(l) {
+    var m = (l.mode || '').toUpperCase();
+    return m !== 'WALK' && m !== 'BICYCLE' && m !== 'CAR';
+  }
+
+  function itineraryDelayMin(legs) {
+    return legs.filter(isTransitLeg).reduce(function(max, l) {
+      return Math.max(max, legDelayMin(l));
+    }, 0);
+  }
+
+  function itineraryCancelled(legs) {
+    return legs.filter(isTransitLeg).some(function(l) {
+      if (l.cancelled || (l.from && l.from.cancelled) || (l.to && l.to.cancelled)) return true;
+      return Array.isArray(l.intermediateStops) && l.intermediateStops.some(function(s) { return s.cancelled; });
+    });
+  }
+
+  function itineraryFareUrl(legs) {
+    for (var i = 0; i < legs.length; i++) {
+      var tickets = legs[i].ticketUrls || {};
+      var url = tickets.web || tickets.android || tickets.ios || legs[i].agencyFareUrl;
+      if (url && /^https?:\/\//i.test(url)) return url;
+    }
+    return '';
+  }
+
+  function bestTrainItinerary(trains) {
+    var list = (trains && trains.trains || []).filter(function(tr) { return !tr.cancelled; });
+    if (!list.length) return null;
+    function quality(tr) {
+      var punctuality = tr.punctuality != null ? tr.punctuality : 85;
+      return punctuality - (tr.transfers || 0) * 2 - (tr.delayMin || 0);
+    }
+    return list.reduce(function(best, tr) {
+      if (!best) return tr;
+      var q = quality(tr), bq = quality(best);
+      if (q > bq || (q === bq && (tr.dureeSec || 0) < (best.dureeSec || 0))) return tr;
+      return best;
+    }, null);
+  }
+
   function parseMotisResponse(d) {
     var itins = d.itineraries;
     if (!itins || !itins.length) return { _empty: true, trains: [] };
@@ -1776,7 +1848,7 @@
       ? dedupedAll.filter(function(it){ return ptDuration(it) >= medianDur * 0.40; })
       : dedupedAll;
 
-    var trains = deduped.slice(0, 3).map(function(it) {
+    var trains = deduped.map(function(it) {
       var MAINLINE = ['REGIONAL_RAIL','RAIL','INTERCITY_RAIL','LONG_DISTANCE','COACH','TRANSIT'];
 
       // mainLegs: intercity/regional rail only — used for card header (dep, arr, train name).
@@ -1888,24 +1960,30 @@
         return { label: lLabel, from: lFrom, to: lTo, depart: lDep, arrivee: lArr, waitMin: waitMin };
       }) : [];
 
+      var depStr = (allPtLegs[0] && allPtLegs[0].from && allPtLegs[0].from.departure) || (allPtLegs[0] && allPtLegs[0].startTime) || it.startTime;
+      var arrStr = (last.to && last.to.arrival) || last.endTime || it.endTime;
+      var secs = depStr && arrStr ? (new Date(arrStr) - new Date(depStr)) / 1000 : 0;
+      var dureeSec = secs > 0 ? secs : allPtLegs.reduce(function(acc, l) { return acc + (l.duration || 0); }, 0);
+      var realTime = allPtLegs.some(function(l) { return l.realTime; });
+      var delayMin = itineraryDelayMin(allPtLegs);
+      var cancelled = itineraryCancelled(allPtLegs);
+      var punctuality = cancelled ? 0 : (realTime ? Math.max(5, 100 - delayMin * 2) : null);
+
       return {
         // Departure = first PT leg overall (may be metro/tram before mainline train).
         // first.from.departure would give the mainline train time, missing the earlier metro leg.
-        depart:    isoToHHMM((allPtLegs[0] && allPtLegs[0].from && allPtLegs[0].from.departure) || (allPtLegs[0] && allPtLegs[0].startTime) || it.startTime),
-        arrivee:   isoToHHMM((last.to   && last.to.arrival)      || last.endTime    || it.endTime),
-        // Durée = uniquement le temps en transport (sans marche initiale/finale)
-        duree:     (function() {
-                     // Wall-clock duration: first PT departure (incl. metro) → last PT arrival.
-                     var depStr = (allPtLegs[0] && allPtLegs[0].from && allPtLegs[0].from.departure) || (allPtLegs[0] && allPtLegs[0].startTime) || it.startTime;
-                     var arrStr = (last.to   && last.to.arrival)      || last.endTime    || it.endTime;
-                     var secs   = depStr && arrStr ? (new Date(arrStr) - new Date(depStr)) / 1000 : 0;
-                     return secs > 0 ? fmtDur(secs) : fmtDur(allPtLegs.reduce(function(acc, l) { return acc + (l.duration || 0); }, 0));
-                   })(),
-        numero:    label,
-        transfers: numTransfers,
-        fiabilite: modeToReliab(first.mode || ''),
-        realTime:  allPtLegs.some(function(l) { return l.realTime; }),
-        legs:      legDetails
+        depart:      isoToHHMM(depStr),
+        arrivee:     isoToHHMM(arrStr),
+        duree:       fmtDur(dureeSec),
+        dureeSec:    dureeSec,
+        numero:      label,
+        transfers:   numTransfers,
+        delayMin:    delayMin,
+        cancelled:   cancelled,
+        punctuality: punctuality,
+        fareUrl:     itineraryFareUrl(allPtLegs),
+        realTime:    realTime,
+        legs:        legDetails
       };
     });
 
@@ -1990,20 +2068,6 @@
     if (m === 'FERRY')                          return t('modeFerry');
     if (m === 'AIRPLANE')                       return t('modePlane');
     return t('modeTransit');
-  }
-
-  /* Fiabilité estimée selon le mode */
-  /* Mode-based on-time estimates (SNCF 2023 annual report + RATP stats).
-   * Only shown as a bar when realTime=true (live delay data from Transitous).
-   * Otherwise omitted — estimates are too imprecise to display per-trip. */
-  function modeToReliab(mode) {
-    var m = (mode || '').toUpperCase();
-    if (m === 'HIGHSPEED_RAIL') return 92; // TGV: ~92% on-time (SNCF 2023)
-    if (m === 'RAIL')           return 85; // TER/Intercités: ~85%
-    if (m === 'BUS')            return 80;
-    if (m === 'SUBWAY')         return 90; // RATP: ~90%
-    if (m === 'TRAM')           return 87;
-    return 83;
   }
 
   /* ─── Score ──────────────────────────────────────────────────────────────
@@ -2185,8 +2249,9 @@
   }
 
   function calcScore(m, aq, om, oaq) {
-    var own = scoreOne(m, aq);
-    return (om && oaq) ? Math.min(own, scoreOne(om, oaq)) : own;
+    var own = scoreOne(m, aq).score;
+    var origin = (om && oaq) ? scoreOne(om, oaq).score : own;
+    return { score: Math.min(own, origin) };
   }
 
   var MODE_EXPOSURE = { car:1, carpool:1, bus:0.9, bike:1.2, train:0.2 };
@@ -2295,24 +2360,25 @@
       score:62, note:noteVoiture  // already uses t() below
     });
 
-    /* ── Train ─────────────────────────────────────────────────────────
-     * Tarif TGV/Intercités : très variable (12€ Ouigo → 90€+).
-     * Estimation raisonnable : base 10€ + 0.12€/km, plafonné à 90€.
-     * Pour TER : ~0.08€/km.
-     * ─────────────────────────────────────────────────────────────────── */
     if (trains && trains.trains && trains.trains.length) {
-      var tr0 = trains.trains[0];
-      var co2t = +(c.train.co2gPerKm * dist / 1000).toFixed(2);
-      var coutTrain = dist < c.train.tgvThresholdKm
-        ? Math.round(Math.max(c.train.terMin, dist * c.train.terEurPerKm))
-        : Math.round(Math.min(c.train.tgvMax, Math.max(c.train.tgvMin, dist * c.train.tgvEurPerKm)));
-      modes.push({
-        modeKey:'train', mode:t('modeTrain'), icon:'🚆', duree:tr0.duree,
-        cout:'~' + coutTrain + '€',
-        fib:tr0.fiabilite, co2kg:co2t,
-        co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',
-        score:88, note:t('trainRealtime')
-      });
+      var trBest = bestTrainItinerary(trains);
+      if (trBest) {
+        var co2t = +(c.train.co2gPerKm * dist / 1000).toFixed(2);
+        var scoreTrain = 88 - (trBest.delayMin || 0) * 2 - (trBest.transfers || 0) * 2 - (trBest.realTime ? 0 : 3);
+        if (trBest.fareUrl) scoreTrain += 2;
+        scoreTrain = Math.max(5, Math.min(100, scoreTrain));
+        var noteTrain = trBest.realTime
+          ? (trBest.delayMin > 0 ? t('trainDelayed')(trBest.delayMin) : t('trainOnTime'))
+          : t('trainScheduled');
+        if (trBest.fareUrl) noteTrain += ' · ' + t('trainFareAvailable');
+        modes.push({
+          modeKey:'train', mode:t('modeTrain'), icon:'🚆', duree:trBest.duree,
+          cout:trBest.fareUrl ? t('trainFareAvailable') : t('trainFareUnknown'),
+          fib:trBest.punctuality, co2kg:co2t,
+          co2:co2t<1?Math.round(co2t*1000)+' g':co2t.toFixed(1)+' kg',
+          score:scoreTrain, note:noteTrain
+        });
+      }
     } else if (dist > 5) {
       var co2t2 = +(c.train.co2gPerKm * dist / 1000).toFixed(2);
       var coutTrain2 = dist < c.train.tgvThresholdKm
@@ -2515,7 +2581,7 @@
 
     // Section pollen
     var pollenHTML;
-    if (aq.outOfRange || Object.keys(aq.pollens).length === 0) {
+    if (Object.keys(aq.pollens).length === 0) {
       pollenHTML =
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
         '<span class="badge bb">'+t('pollenNA')+'</span></div>'+
@@ -2652,6 +2718,12 @@
               }).join('')+
             '</div>';
           }
+          var statusLabel = tr.cancelled
+            ? t('trainCancelled')
+            : (tr.realTime
+              ? (tr.delayMin > 0 ? t('trainDelayed')(tr.delayMin) : t('trainOnTime'))
+              : t('trainScheduled'));
+          var statusColor = tr.cancelled ? '#EF4444' : (tr.delayMin > 0 ? '#F59E0B' : '#10B981');
           return '<div class="tc'+(tr.transfers>0?' tc-expand':'')+'">'+
             '<div class="tc-header">'+
             '<span style="font-size:1.1rem">'+(i===0?'🏆':'🚆')+'</span>'+
@@ -2666,12 +2738,8 @@
             (tr.transfers>0
               ?'<span style="font-size:.62rem;color:var(--amber);font-family:var(--fm)">'+t('trainsTransfers')(tr.transfers)+'</span>'
               :'<span style="font-size:.62rem;color:var(--em);font-family:var(--fm)">'+t('trainsDirect')+'</span>')+
-            '<div style="display:flex;align-items:center;gap:3px;font-size:.62rem;font-family:var(--fm);color:var(--t2)">'+
-            (tr.realTime
-              ? '<div class="rb"><div class="rf" style="width:'+tr.fiabilite+'%"></div></div>'+tr.fiabilite+'%</div>'
-                +'<span style="font-size:.58rem;color:var(--em);font-family:var(--fm)">'+t('trainsRealtime')+'</span>'
-              : '</div>'  /* no fake reliability bar without realtime data */
-            )+
+            '<div style="display:flex;align-items:center;gap:3px;font-size:.62rem;font-family:var(--fm);color:'+statusColor+'">'+statusLabel+'</div>'+
+            (tr.fareUrl?'<div style="font-size:.58rem;color:var(--t3);font-family:var(--fm)">'+t('trainFareAvailable')+'</div>':'')+
             '</div></div>'+
             '</div>'+
             legsHtml+'</div>';

@@ -298,6 +298,82 @@ test.describe('Tab: Trains', () => {
     await expect(page.locator(SEL.tabContent)).toContainText('Lyon Part-Dieu');
     await expect(page.locator(SEL.tabContent)).toContainText('06:00');
   });
+
+  test('uses real Transitous delay, cancellation and fare data', async ({ page }) => {
+    await mockGoodConditions(page);
+    await page.route(/api\.transitous\.org/, route =>
+      route.fulfill({ json: { itineraries: [
+        {
+          duration: 6600,
+          startTime: '2026-05-16T06:20:00Z',
+          endTime: '2026-05-16T08:10:00Z',
+          transfers: 0,
+          legs: [{
+            mode: 'RAIL',
+            tripId: 'delayed',
+            startTime: '2026-05-16T06:20:00Z',
+            scheduledStartTime: '2026-05-16T06:00:00Z',
+            endTime: '2026-05-16T08:10:00Z',
+            scheduledEndTime: '2026-05-16T07:50:00Z',
+            duration: 6600,
+            headsign: 'Lyon Part-Dieu',
+            realTime: true,
+            from: { name: 'Paris Gare de Lyon' },
+            to: { name: 'Lyon Part-Dieu' }
+          }]
+        },
+        {
+          duration: 6600,
+          startTime: '2026-05-16T06:30:00Z',
+          endTime: '2026-05-16T08:20:00Z',
+          transfers: 0,
+          legs: [{
+            mode: 'RAIL',
+            tripId: 'on-time',
+            startTime: '2026-05-16T06:30:00Z',
+            scheduledStartTime: '2026-05-16T06:30:00Z',
+            endTime: '2026-05-16T08:20:00Z',
+            scheduledEndTime: '2026-05-16T08:20:00Z',
+            duration: 6600,
+            headsign: 'Lyon Part-Dieu',
+            realTime: true,
+            ticketUrls: { web: 'https://example.com/ticket' },
+            from: { name: 'Paris Gare de Lyon' },
+            to: { name: 'Lyon Part-Dieu' }
+          }]
+        },
+        {
+          duration: 6600,
+          startTime: '2026-05-16T06:45:00Z',
+          endTime: '2026-05-16T08:35:00Z',
+          transfers: 0,
+          legs: [{
+            mode: 'RAIL',
+            tripId: 'cancelled',
+            startTime: '2026-05-16T06:45:00Z',
+            endTime: '2026-05-16T08:35:00Z',
+            duration: 6600,
+            headsign: 'Lyon Part-Dieu',
+            realTime: true,
+            cancelled: true,
+            from: { name: 'Paris Gare de Lyon' },
+            to: { name: 'Lyon Part-Dieu' }
+          }]
+        }
+      ]}})
+    );
+    await gotoSearch(page);
+    await page.locator(SEL.origInput).fill('Paris');
+    await page.locator(SEL.destInput).fill('Lyon');
+    await page.locator(SEL.analyzeBtn).click();
+    await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 15_000 });
+    await clickTab(page, 'route');
+    await expect(page.locator(SEL.tabContent)).toContainText('À l\'heure');
+    await expect(page.locator(SEL.tabContent)).toContainText('Tarif disponible');
+    await clickTab(page, 'trains');
+    await expect(page.locator(SEL.tabContent)).toContainText('Retard +20 min');
+    await expect(page.locator(SEL.tabContent)).toContainText('Supprimé');
+  });
 });
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
