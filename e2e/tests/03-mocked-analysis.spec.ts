@@ -112,6 +112,14 @@ test.describe('Tab: Aperçu (overview)', () => {
     await runMockedAnalysis(page, mockBadConditions);
     await expect(page.locator(SEL.tabContent)).toContainText('38°');
   });
+
+  test('advisories cover both trip endpoints and travel risk', async ({ page }) => {
+    await runMockedAnalysis(page, mockBadConditions);
+    const content = await page.locator(SEL.tabContent).textContent();
+    expect(content).toContain('Au départ — Orage prévu');
+    expect(content).toContain('À destination — Orage prévu');
+    expect(content).toContain('Risque de trajet élevé');
+  });
 });
 
 // ── Tab: Trajet ───────────────────────────────────────────────────────────────
@@ -367,6 +375,9 @@ test.describe('Tab: Trains', () => {
     await page.locator(SEL.destInput).fill('Lyon');
     await page.locator(SEL.analyzeBtn).click();
     await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 15_000 });
+    const overview = await page.locator(SEL.tabContent).textContent();
+    expect(overview).toContain('Train observé');
+    expect(overview).toContain('Tarif disponible');
     await clickTab(page, 'route');
     await expect(page.locator(SEL.tabContent)).toContainText('À l\'heure');
     await expect(page.locator(SEL.tabContent)).toContainText('Tarif disponible');

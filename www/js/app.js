@@ -163,6 +163,16 @@
       recoUvMed: function(u) { return 'UV élevé ('+u+') — SPF 30+ conseillé'; },
       recoForecast: function(n) { return 'Prévision J+'+n+' — données météo estimées, susceptibles d\'évoluer'; },
       recoPollenActive: function(s) { return 'Pollen actif : ' + s; },
+      recoAtDeparture: 'Au départ — ',
+      recoAtArrival: 'À destination — ',
+      recoRainAmount: function(v) { return 'Précipitations fortes ('+v+' mm) — protections imperméables'; },
+      recoSnow: function(v) { return 'Neige ('+v+' cm) — chaussures adaptées et prudence'; },
+      recoWind: function(v) { return 'Vent fort ('+v+' km/h) — limiter le vélo'; },
+      recoVisibility: function(v) { return 'Visibilité réduite ('+v+' km) — prudence'; },
+      recoLowDaylight: function(v) { return 'Peu de jour ('+v+' h) — prévoir un éclairage'; },
+      recoRiskHigh: 'Risque de trajet élevé — privilégier le train et éviter le vélo',
+      recoBestMode: function(name, score) { return 'Option la mieux notée : '+name+' ('+score+'/100).'; },
+      recoTrainReal: function(duree, fare) { return 'Train observé : '+duree+' · '+fare+'.'; },
       recoCarNote: function(dur, dist) { return 'Voiture : '+dur+' pour '+dist+'.'; },
       recoTrainNote: 'Consultez SNCF Connect ou Vianavigo pour les horaires de trains',
       recoNA: 'Données routières indisponibles.',
@@ -330,6 +340,16 @@
       recoUvMed: function(u) { return 'High UV ('+u+') — SPF 30+ advised'; },
       recoForecast: function(n) { return 'Forecast J+'+n+' — estimated weather, subject to change'; },
       recoPollenActive: function(s) { return 'Active pollen: ' + s; },
+      recoAtDeparture: 'At departure — ',
+      recoAtArrival: 'At arrival — ',
+      recoRainAmount: function(v) { return 'Heavy precipitation ('+v+' mm) — waterproof gear advised'; },
+      recoSnow: function(v) { return 'Snow ('+v+' cm) — wear appropriate footwear'; },
+      recoWind: function(v) { return 'Strong wind ('+v+' km/h) — avoid cycling'; },
+      recoVisibility: function(v) { return 'Reduced visibility ('+v+' km) — drive carefully'; },
+      recoLowDaylight: function(v) { return 'Short daylight ('+v+' h) — bring a light'; },
+      recoRiskHigh: 'High travel risk — prefer train and avoid cycling',
+      recoBestMode: function(name, score) { return 'Best-rated option: '+name+' ('+score+'/100).'; },
+      recoTrainReal: function(duree, fare) { return 'Observed train: '+duree+' · '+fare+'.'; },
       recoCarNote: function(dur, dist) { return 'Car: '+dur+' for '+dist+'.'; },
       recoTrainNote: 'Check SNCF Connect or Vianavigo for train timetables',
       recoNA: 'Road data unavailable.',
@@ -2443,24 +2463,47 @@
   }
 
   /* ─── Recommandations ────────────────────────────── */
-  function buildReco(m, aq, rt) {
-    var al=[], alt=[], c=m.code;
-    if (aq.polMax>200) al.push(t('recoPollenHigh')(aq.polMax));
-    else if(aq.polMax>50) al.push(t('recoPollenMed'));
-    else if(aq.polMax>10) al.push(t('recoPollenLow')(aq.polActifs.join(', ')));
-    if (aq.aqi>100) al.push(t('recoAqiBad')(aq.aqi));
-    else if(aq.aqi>60) al.push(t('recoAqiMed')(aq.aqi));
-    if (c>=95) al.push(t('recoStorm'));
-    else if(c>=80) al.push(t('recoRainHeavy'));
-    else if(c>=51) al.push(t('recoRain'));
-    if (m.temp<2) al.push(t('recoFrost')(m.temp));
-    if (m.temp>34) al.push(t('recoHeat')(m.temp));
-    if (m.uv>=8) al.push(t('recoUvHigh')(m.uv));
-    else if(m.uv>=6) al.push(t('recoUvMed')(m.uv));
-    if (m.isForecast) al.push(t('recoForecast')(dayOffset()));
+  function endpointRecos(m, aq, label) {
+    var list=[], num=function(v){return (typeof v==='number'&&isFinite(v))?v:null;};
+    if (!m || !aq) return list;
+    var c=num(m.code);
+    if (num(aq.polMax)>200) list.push(t('recoPollenHigh')(aq.polMax));
+    else if (num(aq.polMax)>50) list.push(t('recoPollenMed'));
+    else if (num(aq.polMax)>10) list.push(t('recoPollenLow')((aq.polActifs||[]).join(', ')));
+    if (num(aq.aqi)>100) list.push(t('recoAqiBad')(aq.aqi));
+    else if (num(aq.aqi)>60) list.push(t('recoAqiMed')(aq.aqi));
+    if (c!==null && c>=95) list.push(t('recoStorm'));
+    else if (num(m.precipMm)>=10) list.push(t('recoRainAmount')(m.precipMm));
+    else if (c!==null && c>=80) list.push(t('recoRainHeavy'));
+    else if (c!==null && c>=51) list.push(t('recoRain'));
+    if (num(m.snowCm)>=2) list.push(t('recoSnow')(m.snowCm));
+    var wind=Math.max(num(m.wind)||0, num(m.gust)||0);
+    if (wind>=60) list.push(t('recoWind')(wind));
+    if (num(m.visibility)!==null && m.visibility<5) list.push(t('recoVisibility')(m.visibility));
+    if (num(m.daylight)!==null && m.daylight<8) list.push(t('recoLowDaylight')(m.daylight));
+    if (num(m.temp)<2) list.push(t('recoFrost')(m.temp));
+    if (num(m.temp)>34) list.push(t('recoHeat')(m.temp));
+    if (num(m.uv)>=8) list.push(t('recoUvHigh')(m.uv));
+    else if (num(m.uv)>=6) list.push(t('recoUvMed')(m.uv));
+    return list.map(function(s){return label+s;});
+  }
+
+  function buildReco(m, aq, om, oaq, rt, travelRisk, modes, trains) {
+    var al=endpointRecos(m, aq, t('recoAtArrival'));
+    if (om && oaq) al=al.concat(endpointRecos(om, oaq, t('recoAtDeparture')));
+    if (m.isForecast || (om && om.isForecast)) al.push(t('recoForecast')(dayOffset()));
+    if (travelRisk && travelRisk.level==='high') al.push(t('recoRiskHigh'));
+
+    var alt=[];
     if (rt) alt.push(t('recoCarNote')(rt.dur, rt.dist));
-    alt.push(t('recoTrainNote'));
-    return { cond: wmoDesc(c), al: al, alt: alt };
+    var bm=(modes||[]).find(function(x){return x.best;});
+    var trBest=bestTrainItinerary(trains);
+    if (bm && bm.modeKey!=='car' && !(trBest && bm.modeKey==='train')) {
+      alt.push(t('recoBestMode')(bm.mode, bm.score));
+    }
+    if (trBest) alt.push(t('recoTrainReal')(trBest.duree, trBest.fareUrl?t('trainFareAvailable'):t('trainFareUnknown')));
+    else alt.push(t('recoTrainNote'));
+    return { cond: wmoDesc(m.code), al: al, alt: alt };
   }
 
   /* ─── Score circle ────────────────────────────────── */
@@ -3059,7 +3102,7 @@
       var scoreRes = calcScore(ctx.m, ctx.aq, ctx.om, ctx.oaq);
       var travelRisk = calcTravelRisk(ctx.m, ctx.rt, ctx.om);
       var modes    = calcModes(ctx.rt, ctx.trains || null, ctx.m, ctx.om);
-      var reco     = buildReco(ctx.m, ctx.aq, ctx.rt);
+      var reco     = buildReco(ctx.m, ctx.aq, ctx.om, ctx.oaq, ctx.rt, travelRisk, modes, ctx.trains);
       DATA = { m: ctx.m, aq: ctx.aq, om: ctx.om || null, oaq: ctx.oaq || null,
                rt: ctx.rt, trains: ctx.trains || null,
                reco: reco, modes: modes, scoreRes: scoreRes, travelRisk: travelRisk,
