@@ -15,14 +15,9 @@ import { join } from 'node:path';
 const args = process.argv.slice(2);
 const jsonPath = args[0];
 const outDir = args[1];
-let excludeLines = null;
-const optIdx = args.indexOf('--exclude-lines');
-if (optIdx !== -1 && args[optIdx + 1]) {
-  excludeLines = new Set(args[optIdx + 1].split(',').map(s => parseInt(s, 10)).filter(n => !Number.isNaN(n)));
-}
 
 if (!jsonPath || !outDir) {
-  console.error('usage: node scripts/mutants-txt.mjs <mutation.json> <outDir> [--exclude-lines 7,22]');
+  console.error('usage: node scripts/mutants-txt.mjs <mutation.json> <outDir>');
   process.exit(2);
 }
 
@@ -49,11 +44,6 @@ const formatRef = (file, mutant) => {
 let total = 0;
 for (const [file, fileResult] of Object.entries(files)) {
   for (const mutant of fileResult.mutants || []) {
-    const mutantLine = mutant.location?.start?.line;
-    if (excludeLines && mutantLine != null && excludeLines.has(mutantLine)) {
-      console.log(`Excluded (line ${mutantLine}): ${formatRef(file, mutant)}`);
-      continue;
-    }
     total += 1;
     const ref = formatRef(file, mutant);
     switch (mutant.status) {

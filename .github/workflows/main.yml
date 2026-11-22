@@ -116,16 +116,10 @@ jobs:
             files: lib/cache.ts
           - name: errors
             files: lib/errors.ts
-            # Equivalent mutants on these lines:
-            #   L7  — default lang param '' ≡ 'fr' (only compared to 'en')
-            #   L22 — 4xx code '' default + ?.[] guarded by /HTTP 4\d\d/ (always matches)
-            exclude_lines: '7,22'
           - name: modes
             files: lib/modes.ts
           - name: ratelimit
             files: lib/ratelimit.ts
-            # L35: catch{} removal — invalid-URL path same behavior via !rl fallback
-            exclude_lines: '35'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -156,12 +150,7 @@ jobs:
             if [ "$ec" -ne 0 ]; then
               echo "WARN: stryker exited $ec on $f (report may still be valid)"
             fi
-          parse_args=(reports/mutation/mutation.json "work-$i/mutants.out")
-          EXCLUDE_LINES="${{ matrix.exclude_lines }}"
-          if [ -n "$EXCLUDE_LINES" ]; then
-            parse_args+=(--exclude-lines "$EXCLUDE_LINES")
-          fi
-            node scripts/mutants-txt.mjs "${parse_args[@]}" && p=0 || p=$?
+          node scripts/mutants-txt.mjs reports/mutation/mutation.json "work-$i/mutants.out" && p=0 || p=$?
             rm -rf reports/mutation
             echo "::endgroup::"
             if [ "$p" -eq 2 ]; then

@@ -34,8 +34,8 @@ Run `cd unit && npm install` to enable them.
 - Mutation tests → `cd unit && npm run test:mutation` (Stryker, ~1-2min per module)
   runs in the `mutation-tests` CI job (5 modules in parallel). **Non-blocking**: only
   an infrastructure failure fails the job; missed mutants are reported as warnings
-  in the `mutation-summary` job summary table. 4 provably-equivalent mutants are
-  excluded per module (`exclude_re` in the workflow matrix).
+  in the `mutation-summary` job summary table. Provably-equivalent mutants are
+  excluded with `// Stryker disable` directives in the source files.
 
 ## CI job graph
 

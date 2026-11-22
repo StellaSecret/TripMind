@@ -4,6 +4,7 @@
 
 export type Lang = 'fr' | 'en';
 
+// Stryker disable next-line all: default lang is only compared to 'en'
 export function classifyError(e: Error | null, context: string, lang: Lang = 'fr'): string {
   const msg = e?.message ?? '';
   const en = lang === 'en';
@@ -19,6 +20,7 @@ export function classifyError(e: Error | null, context: string, lang: Lang = 'fr
       : '⚙️ Un service de données est temporairement indisponible. Réessayez dans un instant.';
   }
   if (/HTTP 4\d\d/.test(msg)) {
+    // Stryker disable next-line all: HTTP 4xx regex always yields a 3-digit code
     const code = msg.match(/\d{3}/)?.[0] ?? '';
     return en
       ? `🔒 Access denied by a data service (HTTP ${code}).`

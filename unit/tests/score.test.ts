@@ -119,6 +119,11 @@ describe('calcScore — cloud cover penalties', () => {
   it('clouds and WMO code use the worse penalty, not a sum', () => {
     expect(calcScore({ code: 3, temp: 20, clouds: 90 }, clearAQ)).toBe(95);
   });
+
+  it('cloud band boundaries are exact', () => {
+    expect(calcScore({ code: 0, temp: 20, clouds: 69 }, clearAQ)).toBe(99);
+    expect(calcScore({ code: 0, temp: 20, clouds: 89 }, clearAQ)).toBe(97);
+  });
 });
 
 describe('calcScore — snow and freezing precipitation', () => {
@@ -146,6 +151,13 @@ describe('calcScore — snow and freezing precipitation', () => {
 
   it('freezing rain with high precip uses the worse penalty', () => {
     expect(calcScore({ code: 66, temp: 20, precipProb: 100 }, clearAQ)).toBe(70);
+  });
+
+  it('remaining freezing and snow codes use their branches', () => {
+    expect(calcScore({ code: 57, temp: 20 }, clearAQ)).toBe(78);
+    expect(calcScore({ code: 67, temp: 20 }, clearAQ)).toBe(78);
+    expect(calcScore({ code: 86, temp: 20 }, clearAQ)).toBe(85);
+    expect(calcScore({ code: 78, temp: 20 }, clearAQ)).toBe(88);
   });
 });
 
@@ -378,6 +390,18 @@ describe('calcScore — individual pollutant penalties', () => {
     expect(calcScore(clearWeather, { ...clearAQ, aod: 1.5 })).toBe(92);
   });
 
+  it('pollutant values below the low band add no penalty', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, pm25: 9 })).toBe(100);
+    expect(calcScore(clearWeather, { ...clearAQ, dust: 49 })).toBe(100);
+    expect(calcScore(clearWeather, { ...clearAQ, aod: 0.49 })).toBe(100);
+  });
+
+  it('pollutant medium bands are exact', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, pm25: 14 })).toBe(98);
+    expect(calcScore(clearWeather, { ...clearAQ, pm25: 15 })).toBe(96);
+    expect(calcScore(clearWeather, { ...clearAQ, pm25: 24 })).toBe(96);
+  });
+
   it('AQI and pollutant use the worse penalty, not a sum', () => {
     expect(calcScore(clearWeather, { aqi: 150, polMax: 0, pm25: 50 })).toBe(75);
   });
@@ -467,6 +491,35 @@ describe('calcScore — precipitation amount, snow, visibility and gusts', () =>
   it('daylight and WMO code use the worse penalty, not a sum', () => {
     expect(calcScore({ code: 61, temp: 20, daylight: 3 }, clearAQ)).toBe(88);
   });
+
+  it('precipitation amount bands are exact', () => {
+    expect(calcScore({ code: 0, temp: 20, precipMm: 0.9 }, clearAQ)).toBe(100);
+    expect(calcScore({ code: 0, temp: 20, precipMm: 1 }, clearAQ)).toBe(96);
+    expect(calcScore({ code: 0, temp: 20, precipMm: 4.9 }, clearAQ)).toBe(96);
+    expect(calcScore({ code: 0, temp: 20, precipMm: 5 }, clearAQ)).toBe(90);
+    expect(calcScore({ code: 0, temp: 20, precipMm: 9.9 }, clearAQ)).toBe(90);
+  });
+
+  it('snow amount bands are exact', () => {
+    expect(calcScore({ code: 0, temp: 20, snowCm: 0.4 }, clearAQ)).toBe(100);
+    expect(calcScore({ code: 0, temp: 20, snowCm: 0.5 }, clearAQ)).toBe(94);
+    expect(calcScore({ code: 0, temp: 20, snowCm: 1.9 }, clearAQ)).toBe(94);
+    expect(calcScore({ code: 0, temp: 20, snowCm: 2 }, clearAQ)).toBe(88);
+    expect(calcScore({ code: 0, temp: 20, snowCm: 4.9 }, clearAQ)).toBe(88);
+  });
+
+  it('visibility bands are exact', () => {
+    expect(calcScore({ code: 0, temp: 20, visibility: 10 }, clearAQ)).toBe(100);
+    expect(calcScore({ code: 0, temp: 20, visibility: 9.9 }, clearAQ)).toBe(97);
+    expect(calcScore({ code: 0, temp: 20, visibility: 5 }, clearAQ)).toBe(97);
+    expect(calcScore({ code: 0, temp: 20, visibility: 4.9 }, clearAQ)).toBe(94);
+    expect(calcScore({ code: 0, temp: 20, visibility: 1 }, clearAQ)).toBe(94);
+  });
+
+  it('daylight band boundary at 4h is exact', () => {
+    expect(calcScore({ code: 0, temp: 20, daylight: 4 }, clearAQ)).toBe(98);
+    expect(calcScore({ code: 0, temp: 20, daylight: 8 }, clearAQ)).toBe(100);
+  });
 });
 
 describe('calcTravelRisk — hazard and exposure', () => {
@@ -520,6 +573,53 @@ describe('calcTravelRisk — hazard and exposure', () => {
   });
 });
 
+describe('calcTravelRisk — hazard boundaries', () => {
+  const expectRisk = (m: Parameters<typeof calcTravelRisk>[0], risk: number) =>
+    expect(calcTravelRisk(m, null)).toEqual({ risk, level: risk >= 60 ? 'high' : risk >= 30 ? 'moderate' : 'low' });
+
+  it('WMO hazard branches are exact', () => {
+    expectRisk({ code: 56, temp: 20 }, 25);
+    expectRisk({ code: 57, temp: 20 }, 25);
+    expectRisk({ code: 66, temp: 20 }, 25);
+    expectRisk({ code: 67, temp: 20 }, 25);
+    expectRisk({ code: 85, temp: 20 }, 20);
+    expectRisk({ code: 86, temp: 20 }, 20);
+    expectRisk({ code: 77, temp: 20 }, 20);
+    expectRisk({ code: 80, temp: 20 }, 15);
+    expectRisk({ code: 51, temp: 20 }, 5);
+    expectRisk({ code: 95, temp: 20 }, 30);
+  });
+
+  it('precipitation and snow hazard bands are exact', () => {
+    expectRisk({ code: 0, temp: 20, precipMm: 9.9 }, 0);
+    expectRisk({ code: 0, temp: 20, precipMm: 10 }, 10);
+    expectRisk({ code: 0, temp: 20, snowCm: 4.9 }, 0);
+    expectRisk({ code: 0, temp: 20, snowCm: 5 }, 10);
+  });
+
+  it('visibility, wind and gust hazard bands are exact', () => {
+    expectRisk({ code: 0, temp: 20, visibility: 5 }, 0);
+    expectRisk({ code: 0, temp: 20, visibility: 4.9 }, 15);
+    expectRisk({ code: 0, temp: 20, wind: 49 }, 0);
+    expectRisk({ code: 0, temp: 20, wind: 50 }, 5);
+    expectRisk({ code: 0, temp: 20, gust: 59 }, 0);
+    expectRisk({ code: 0, temp: 20, gust: 60 }, 15);
+  });
+
+  it('daylight hazard bands are exact', () => {
+    expectRisk({ code: 0, temp: 20, daylight: 8 }, 0);
+    expectRisk({ code: 0, temp: 20, daylight: 4 }, 5);
+    expectRisk({ code: 0, temp: 20, daylight: 3 }, 10);
+  });
+
+  it('duration hazard bands are exact', () => {
+    expect(calcTravelRisk({ code: 0, temp: 20 }, { durSec: 7199 })).toEqual({ risk: 0, level: 'low' });
+    expect(calcTravelRisk({ code: 0, temp: 20 }, { durSec: 7200 })).toEqual({ risk: 10, level: 'low' });
+    expect(calcTravelRisk({ code: 0, temp: 20 }, { durSec: 14399 })).toEqual({ risk: 10, level: 'low' });
+    expect(calcTravelRisk({ code: 0, temp: 20 }, { durSec: 14400 })).toEqual({ risk: 20, level: 'low' });
+  });
+});
+
 describe('calcScore — origin endpoint', () => {
   const clearAQ = { aqi: 0, polMax: 0 };
 
@@ -544,6 +644,16 @@ describe('calcScore — origin endpoint', () => {
 
   it('ignores a missing midpoint', () => {
     expect(calcScore({ code: 0, temp: 20 }, clearAQ, null, null, null, null)).toBe(100);
+  });
+
+  it('ignores an origin weather reading without air quality', () => {
+    expect(calcScore({ code: 0, temp: 20 }, clearAQ,
+                     { code: 61, temp: 20 }, null)).toBe(100);
+  });
+
+  it('ignores a midpoint weather reading without air quality', () => {
+    expect(calcScore({ code: 0, temp: 20 }, clearAQ, null, null,
+                     { code: 61, temp: 20 }, null)).toBe(100);
   });
 });
 

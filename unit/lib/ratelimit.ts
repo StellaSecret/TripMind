@@ -32,6 +32,7 @@ export function createRateLimiter(limits: Record<string, Pick<RateLimit, 'minGap
 
   return function rateLimitedFetch(url: string, opts?: RequestInit): Promise<Response> {
     let domain: string;
+    // Stryker disable next-line all: invalid-URL fallback is equivalent via !rl path
     try { domain = new URL(url).hostname; } catch { return fetchFn(url, opts); }
     const rl = state[domain];
     if (!rl) return fetchFn(url, opts);
