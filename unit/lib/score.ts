@@ -1,24 +1,10 @@
 /**
  * score.ts — Pure score calculation logic extracted from app.js
- * Kept in sync with SCORE_WEIGHTS and calcScore in app.js
+ * Constants come from shared/constants.json via constants.generated.ts
  */
+import { AQI_BANDS, MODE_EXPOSURE, SCORE_WEIGHTS } from './constants.generated';
 
-export const SCORE_WEIGHTS = {
-  wmo:       { storm: 25, freezing: 22, heavyRain: 18, snow: 15, rain: 12, drizzle: 7, fog: 5, cloudy: 3 },
-  precip:    { veryHigh: 30, high: 18, moderate: 8, low: 3 },
-  precipAmt: { heavy: 18, moderate: 10, light: 4 },
-  snow:      { heavy: 20, moderate: 12, light: 6 },
-  visibility:{ veryPoor: 10, poor: 6, moderate: 3 },
-  daylight:  { short: 4, limited: 2 },
-  cloud:     { overcast: 5, cloudy: 3, partly: 1 },
-  temp:      { extreme: 10, uncomfortable: 5 },
-  wind:      { severe: 8, strong: 5, moderate: 2 },
-  uv:        { extreme: 6, veryHigh: 4, high: 2 },
-  humidity:  { veryHigh: 3, high: 2 },
-  aqi:       { veryPoor: 25, poor: 15, moderate: 8, fair: 3 },
-  pollutant: { high: 8, medium: 4, low: 2 },
-  pollen:    { veryHigh: 12, high: 7, moderate: 3 },
-};
+export { MODE_EXPOSURE, SCORE_WEIGHTS };
 
 export interface WeatherInput {
   code: number | null | undefined;
@@ -233,10 +219,6 @@ export interface TravelRisk {
   risk: number;
   level: RiskLevel;
 }
-
-export const MODE_EXPOSURE = {
-  car: 1, carpool: 1, bus: 0.9, bike: 1.2, train: 0.2,
-};
 
 function hazardOf(m: WeatherInput): number {
   const num = (v: unknown): number | null =>

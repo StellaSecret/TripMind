@@ -47,9 +47,13 @@ describe('carCost', () => {
     expect(long.co2kg).toBeCloseTo(short.co2kg * 2, 0);
   });
 
-  it('total = fuel + toll', () => {
+  it('total = fuel + toll + running', () => {
     const r = carCost(300);
-    expect(r.total).toBe(r.fuel + r.toll);
+    expect(r.total).toBe(r.fuel + r.toll + r.running);
+  });
+
+  it('running cost = 0.12 €/km', () => {
+    expect(carCost(300).running).toBe(36);
   });
 
   it('exact toll threshold: 80km → no toll (strict >)', () => {
@@ -116,15 +120,14 @@ describe('trainCost', () => {
   });
 
   it('TGV cost is clamped to tgvMin for short TGV distances', () => {
-    // A distance just above threshold where dist * tgvEurPerKm < tgvMin
-    const shortTgv = MODE_COSTS.train.tgvThresholdKm; // 150km * 0.12 = 18 < tgvMin 25
+    const shortTgv = MODE_COSTS.train.tgvThresholdKm;
     const { eur } = trainCost(shortTgv);
     expect(eur).toBe(MODE_COSTS.train.tgvMin);
   });
 
   it('TGV cost is clamped to tgvMax for very long distances', () => {
-    // dist where dist * tgvEurPerKm > tgvMax: tgvMax/tgvEurPerKm = 90/0.12 = 750km
-    const { eur } = trainCost(800);
+    const veryLong = MODE_COSTS.train.tgvMax / MODE_COSTS.train.tgvEurPerKm + 100;
+    const { eur } = trainCost(veryLong);
     expect(eur).toBe(MODE_COSTS.train.tgvMax);
   });
 

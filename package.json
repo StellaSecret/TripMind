@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Assistant de d\u00e9placement intelligent pour la France \u2014 APIs publiques, z\u00e9ro token obligatoire",
   "scripts": {
+    "constants": "node unit/scripts/generate-constants.mjs",
     "sync": "cap sync android",
     "open": "cap open android",
     "add-android": "cap add android",

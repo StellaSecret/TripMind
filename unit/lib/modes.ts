@@ -2,50 +2,16 @@
  * modes.ts — MODE_COSTS constants and calcModes cost/CO2 formulas
  * Extracted from app.js for independent testing.
  */
+import { MODE_COSTS } from './constants.generated';
 
-export const MODE_COSTS = {
-  car: {
-    fuelLPer100km:   7.0,
-    fuelEurPerL:     1.85,
-    tollEurPerKm:    0.09,
-    tollThresholdKm: 80,
-    co2gPerKm:       128,
-  },
-  train: {
-    co2gPerKm:       1.7,
-    terEurPerKm:     0.08,
-    terMin:          8,
-    tgvEurPerKm:     0.12,
-    tgvMin:          25,
-    tgvMax:          90,
-    tgvThresholdKm:  150,
-  },
-  bus: {
-    co2gPerKm:       29,
-    eurPerKm:        0.05,
-    minEur:          5,
-    durationFactor:  1.6,
-    minDistKm:       15,
-  },
-  carpool: {
-    co2gPerKm:       51,
-    eurPerKm:        0.06,
-    minEur:          5,
-    durationFactor:  1.1,
-    minDistKm:       15,
-  },
-  bike: {
-    maxDistKm:       20,
-    speedKmH:        15,
-    co2gPerKm:       0,
-  },
-} as const;
+export { MODE_COSTS };
 
-export function carCost(distKm: number): { fuel: number; toll: number; total: number; co2kg: number } {
+export function carCost(distKm: number): { fuel: number; toll: number; running: number; total: number; co2kg: number } {
   const c = MODE_COSTS.car;
   const fuel = Math.round(distKm * c.fuelLPer100km / 100 * c.fuelEurPerL);
   const toll = distKm > c.tollThresholdKm ? Math.round(distKm * c.tollEurPerKm) : 0;
-  return { fuel, toll, total: fuel + toll, co2kg: Math.round(c.co2gPerKm * distKm / 1000) };
+  const running = Math.round(distKm * c.runningEurPerKm);
+  return { fuel, toll, running, total: fuel + toll + running, co2kg: Math.round(c.co2gPerKm * distKm / 1000) };
 }
 
 export function trainCost(distKm: number): { eur: number; co2kg: number } {

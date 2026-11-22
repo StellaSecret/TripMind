@@ -2220,32 +2220,7 @@
    * Weather, precipitation and clouds use the worse penalty, not a sum.
    * Final score clamped [5, 100].
    * ─────────────────────────────────────────────────────────────────────── */
-  var SCORE_WEIGHTS = {
-    // WMO weather code penalties
-    wmo:       { storm:25, freezing:22, heavyRain:18, snow:15, rain:12, drizzle:7, fog:5, cloudy:3 },
-    // Precipitation probability penalties
-    precip:    { veryHigh:30, high:18, moderate:8, low:3 },
-    precipAmt: { heavy:18, moderate:10, light:4 },
-    snow:      { heavy:20, moderate:12, light:6 },
-    visibility:{ veryPoor:10, poor:6, moderate:3 },
-    daylight:  { short:4, limited:2 },
-    // Cloud cover (%) penalties
-    cloud:     { overcast:5, cloudy:3, partly:1 },
-    // Temperature (°C) comfort penalties
-    temp:      { extreme:10, uncomfortable:5 },
-    // Wind speed (km/h) penalties
-    wind:      { severe:8, strong:5, moderate:2 },
-    // UV index penalties
-    uv:        { extreme:6, veryHigh:4, high:2 },
-    // Relative humidity (%) penalties
-    humidity:  { veryHigh:3, high:2 },
-    // European/US AQI penalties
-    aqi:       { veryPoor:25, poor:15, moderate:8, fair:3 },
-    // Individual pollutant concentration penalties (μg/m³)
-    pollutant: { high:8, medium:4, low:2 },
-    // Pollen penalties
-    pollen:    { veryHigh:12, high:7, moderate:3 }
-  };
+  var SCORE_WEIGHTS = window.TRIPMIND_CONSTANTS.SCORE_WEIGHTS;
 
   function scoreOne(m, aq) {
     var s = 100, w = SCORE_WEIGHTS;
@@ -2393,7 +2368,7 @@
     return { score: Math.min.apply(null, scores) };
   }
 
-  var MODE_EXPOSURE = { car:1, carpool:1, bus:0.9, bike:1.2, train:0.2 };
+  var MODE_EXPOSURE = window.TRIPMIND_CONSTANTS.MODE_EXPOSURE;
 
   function hazardOf(m) {
     var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : null; };
@@ -2441,44 +2416,7 @@
    * All rates are per-km estimates for France; sourced as noted.
    * Update these when underlying costs change rather than hunting the code.
    * ─────────────────────────────────────────────────────────────────── */
-  var MODE_COSTS = {
-    car: {
-      fuelLPer100km:   7.0,   // average petrol car
-      fuelEurPerL:     1.85,  // planning estimate, France
-      runningEurPerKm: 0.12,  // maintenance, tyres and depreciation
-      tollEurPerKm:    0.09,  // autoroute average; 0 below threshold
-      tollThresholdKm: 80,
-      co2gPerKm:       128,   // g CO₂/km, average new car
-    },
-    train: {
-      co2gPerKm:       1.7,   // g CO₂/km (SNCF 2023 bilan carbone)
-      terEurPerKm:     0.10,
-      terMin:          10,
-      tgvEurPerKm:     0.20,
-      tgvMin:          30,
-      tgvMax:          130,
-      tgvThresholdKm:  150,   // below: TER pricing; above: TGV pricing
-    },
-    bus: {
-      co2gPerKm:       29,    // g CO₂/km (ADEME long-distance coach)
-      eurPerKm:        0.07,
-      minEur:          8,
-      durationFactor:  1.6,   // relative to car duration
-      minDistKm:       15,
-    },
-    carpool: {
-      co2gPerKm:       51,    // g CO₂/km per passenger (ADEME, 2 occupants avg)
-      eurPerKm:        0.09,
-      minEur:          8,
-      durationFactor:  1.1,
-      minDistKm:       15,
-    },
-    bike: {
-      maxDistKm:       20,
-      speedKmH:        15,    // average cycling speed
-      co2gPerKm:       0,
-    },
-  };
+  var MODE_COSTS = window.TRIPMIND_CONSTANTS.MODE_COSTS;
 
   function calcModes(rt, trains, m, om, rm) {
     var dist=(rt&&rt.distKm)||0, durSec=(rt&&rt.durSec)||0, modes=[];
