@@ -388,6 +388,19 @@
     return hour * 60 + minute <= nowHour * 60 + nowMinute ? nowHour : hour;
   }
 
+  function effectiveMinute(offset, hour, minute, nowHour, nowMinute) {
+    if (offset > 0) return minute;
+    return hour * 60 + minute <= nowHour * 60 + nowMinute ? nowMinute : minute;
+  }
+
+  function arrivalTime(date, hour, minute, durationSec, todayDate) {
+    var start = new Date(date + 'T' + pad(hour) + ':' + pad(minute) + ':00');
+    var end = new Date(start.getTime() + (durationSec || 0) * 1000);
+    var endDate = localDateStr(end);
+    var offset = Math.round((new Date(endDate + 'T00:00:00') - new Date(todayDate + 'T00:00:00')) / 86400000);
+    return { date: endDate, hour: end.getHours(), minute: end.getMinutes(), offset: offset };
+  }
+
   function hourlyIndex(times, date, hour, fallbackIndex) {
     if (Array.isArray(times)) {
       var i = times.indexOf(date + 'T' + pad(hour) + ':00');
@@ -1382,7 +1395,7 @@
         };
         var r1 = function(v) { return (typeof v === 'number' && isFinite(v)) ? Math.round(v * 10) / 10 : null; };
         var km = function(v) { return (typeof v === 'number' && isFinite(v)) ? r1(v / 1000) : null; };
-        var i = offset;
+        var i = Math.max(0, Math.min(offset, (dy.temperature_2m_max || []).length - 1));
         var avg = Math.round((dy.temperature_2m_max[i] + dy.temperature_2m_min[i]) / 2);
         var temp = offset === 0 ? Math.round(c.temperature_2m) : avg;
         var feels = offset === 0 ? Math.round(c.apparent_temperature) : avg - 2;
@@ -2814,6 +2827,9 @@
     var queryDate    = localDateStr(selectedDate);
     var queryHour    = effectiveHour(queryOffset, selectedTrainHour, selectedTrainMinute,
                                      Math.floor(nowHourMin / 60), nowHourMin % 60);
+    var queryMinute  = effectiveMinute(queryOffset, selectedTrainHour, selectedTrainMinute,
+                                       Math.floor(nowHourMin / 60), nowHourMin % 60);
+    var todayDate    = localDateStr(new Date());
     var cacheHour = (dayOffset() === 0 && chosenHourMin <= nowHourMin)
       ? ('now' + Math.floor(nowHourMin / 5)) // bucket by 5-min window
       : trainTimeStr();
@@ -2892,10 +2908,10 @@
                pollens:{}, polMax:0, polActifs:[], polNiveau:{l:'—',c:'bb'} };
     }
 
-    function stepMeteo(ctx) {
+    function stepMeteo(ctx, arr) {
       setStep('s1', 'loading');
       $('lmsg').textContent = t('loadingMeteo');
-      return fetchMeteo(ctx.dGeo.lat, ctx.dGeo.lon, queryDate, queryHour, queryOffset)
+      return fetchMeteo(ctx.dGeo.lat, ctx.dGeo.lon, arr.date, arr.hour, arr.offset)
         .then(function(m) { setStep('s1', 'done'); ctx.m = m; return ctx; })
         .catch(function() {
           setStep('s1', 'fail');
@@ -2904,11 +2920,11 @@
         });
     }
 
-    function stepAirQuality(ctx) {
+    function stepAirQuality(ctx, arr) {
       setStep('s2', 'loading'); setStep('s3', 'loading');
       $('lmsg').textContent = t('loadingAir');
       return fetchAirQuality(ctx.dGeo.lat, ctx.dGeo.lon, isInEurope(ctx.dGeo.lat, ctx.dGeo.lon),
-                             queryDate, queryHour, queryOffset)
+                             arr.date, arr.hour, arr.offset)
         .then(function(aq) { setStep('s2', 'done'); setStep('s3', 'done'); ctx.aq = aq; return ctx; })
         .catch(function() {
           setStep('s2', 'fail'); setStep('s3', 'fail');
@@ -2992,11 +3008,16 @@
     hardTimeout(stepGeocode(), GEOCODE_TIMEOUT_MS, 'geocode-timeout')
       .then(function(ctx) {
         return Promise.all([
-          settleStep(stepMeteo(ctx),      STEP_TIMEOUT_MS, function() { ctx.m  = defaultMeteo(); return ctx; }),
-          settleStep(stepAirQuality(ctx), STEP_TIMEOUT_MS, function() { ctx.aq = defaultAirQuality(); return ctx; }),
-          settleStep(stepRoute(ctx),      STEP_TIMEOUT_MS, function() { ctx.rt = null; return ctx; }),
-          settleStep(stepTrains(ctx),     TRAINS_TIMEOUT_MS, function() { ctx.trains = { _err: t('trainsTimeoutMsg'), trains: [] }; return ctx; })
-        ]).then(function() { return ctx; });
+          settleStep(stepRoute(ctx),  STEP_TIMEOUT_MS,  function() { ctx.rt = null; return ctx; }),
+          settleStep(stepTrains(ctx), TRAINS_TIMEOUT_MS, function() { ctx.trains = { _err: t('trainsTimeoutMsg'), trains: [] }; return ctx; })
+        ]).then(function() {
+          var arr = arrivalTime(queryDate, queryHour, queryMinute,
+                                ctx.rt && ctx.rt.durSec, todayDate);
+          return Promise.all([
+            settleStep(stepMeteo(ctx, arr),      STEP_TIMEOUT_MS, function() { ctx.m  = defaultMeteo(); return ctx; }),
+            settleStep(stepAirQuality(ctx, arr), STEP_TIMEOUT_MS, function() { ctx.aq = defaultAirQuality(); return ctx; })
+          ]);
+        }).then(function() { return ctx; });
       })
       .then(function(ctx) { return new Promise(function(r) { setTimeout(function() { r(ctx); }, 300); }); })
       .then(function(ctx) { return stepRender(ctx); })

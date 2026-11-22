@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveHour, hourlyIndex } from '../lib/time';
+import { arrivalTime, effectiveHour, effectiveMinute, hourlyIndex } from '../lib/time';
 
 describe('effectiveHour', () => {
   it('future date keeps the chosen hour', () => {
@@ -20,6 +20,37 @@ describe('effectiveHour', () => {
 
   it('today with chosen minute after now keeps the chosen hour', () => {
     expect(effectiveHour(0, 14, 11, 14, 10)).toBe(14);
+  });
+});
+
+describe('effectiveMinute', () => {
+  it('future date keeps the chosen minute', () => {
+    expect(effectiveMinute(3, 8, 45, 14, 10)).toBe(45);
+  });
+
+  it('today with a future chosen time keeps the chosen minute', () => {
+    expect(effectiveMinute(0, 16, 45, 14, 10)).toBe(45);
+  });
+
+  it('today with a past chosen time uses the current minute', () => {
+    expect(effectiveMinute(0, 9, 0, 14, 37)).toBe(37);
+  });
+});
+
+describe('arrivalTime', () => {
+  it('adds the route duration within the same day', () => {
+    expect(arrivalTime('2026-11-22', 8, 0, 3600, '2026-11-22'))
+      .toEqual({ date: '2026-11-22', hour: 9, minute: 0, offset: 0 });
+  });
+
+  it('rolls over to the next day', () => {
+    expect(arrivalTime('2026-11-22', 23, 30, 3600, '2026-11-22'))
+      .toEqual({ date: '2026-11-23', hour: 0, minute: 30, offset: 1 });
+  });
+
+  it('missing duration keeps the departure time', () => {
+    expect(arrivalTime('2026-11-22', 8, 15, null, '2026-11-22'))
+      .toEqual({ date: '2026-11-22', hour: 8, minute: 15, offset: 0 });
   });
 });
 
