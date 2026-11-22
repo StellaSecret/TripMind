@@ -358,6 +358,14 @@ describe('calcScore — individual pollutant penalties', () => {
     expect(calcScore(clearWeather, { ...clearAQ, o3: 120 })).toBe(92);
   });
 
+  it('SO2 125 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, so2: 125 })).toBe(92);
+  });
+
+  it('CO 10000 → high (-8)', () => {
+    expect(calcScore(clearWeather, { ...clearAQ, co: 10000 })).toBe(92);
+  });
+
   it('AQI and pollutant use the worse penalty, not a sum', () => {
     expect(calcScore(clearWeather, { aqi: 150, polMax: 0, pm25: 50 })).toBe(75);
   });

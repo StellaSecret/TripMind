@@ -95,7 +95,7 @@
       pollenFaible: 'Faible', pollenModere: 'Modéré', pollenEleve: 'Élevé', pollenTresEleve: 'Très élevé',
       pollenNA: 'Données indisponibles', pollenNoData: '⚠️ Données pollen indisponibles hors Europe (modèle SILAM)', pollenNone: '✓ Aucun pollen significatif',
       pollenUnit: 'grain/m³ max',
-      pollenNames: { Aulne: 'Aulne', Bouleau: 'Bouleau', Graminées: 'Graminées', Armoise: 'Armoise', Olivier: 'Olivier' },
+      pollenNames: { Aulne: 'Aulne', Bouleau: 'Bouleau', Graminées: 'Graminées', Armoise: 'Armoise', Olivier: 'Olivier', Ambroisie: 'Ambroisie' },
       /* Route */
       routeCard: 'Itinéraire routier', routeEstim: ' estimé hors trafic',
       routeNote: 'Durée théorique sans trafic (OSRM / OpenStreetMap)',
@@ -155,6 +155,8 @@
       recoPollenLow: function(s) { return 'Pollen modéré ('+s+')'; },
       recoAqiBad: function(v) { return 'Qualité air mauvaise (AQI '+v+') — masque FFP2 recommandé'; },
       recoAqiMed: function(v) { return "Qualité air médiocre (AQI "+v+") — limitez l'effort"; },
+      recoSo2: function(v) { return 'Dioxyde de soufre élevé ('+v+' μg/m³) — limitez l’effort'; },
+      recoCo: function(v) { return 'Monoxyde de carbone élevé ('+v+' μg/m³) — évitez les zones saturées'; },
       recoStorm: 'Orage prévu — reportez si possible',
       recoRainHeavy: 'Averses fortes — imperméable recommandé',
       recoRain: 'Pluie — pensez à votre imperméable',
@@ -193,6 +195,7 @@
       airPollNA: '⏱ Données de polluants non disponibles pour ce jour.',
       pm25: 'Particules fines', pm10: 'Particules grossières',
       no2: "Dioxyde d'azote", ozone: 'Ozone troposphérique',
+      so2: 'Dioxyde de soufre', co: 'Monoxyde de carbone',
       pollutantsNA: 'Données polluants indisponibles',
       /* Score */
       scoreDetail: function(s) { return 'Score '+s+'/100 · météo + air + pollen'; },
@@ -274,7 +277,7 @@
       pollenFaible: 'Low', pollenModere: 'Moderate', pollenEleve: 'High', pollenTresEleve: 'Very high',
       pollenNA: 'Data unavailable', pollenNoData: '⚠️ Pollen data unavailable outside Europe (SILAM model)', pollenNone: '✓ No significant pollen',
       pollenUnit: 'grain/m³ max',
-      pollenNames: { Aulne: 'Alder', Bouleau: 'Birch', Graminées: 'Grass', Armoise: 'Mugwort', Olivier: 'Olive' },
+      pollenNames: { Aulne: 'Alder', Bouleau: 'Birch', Graminées: 'Grass', Armoise: 'Mugwort', Olivier: 'Olive', Ambroisie: 'Ragweed' },
       /* Route */
       routeCard: 'Road route', routeEstim: ' estimated without traffic',
       routeNote: 'Theoretical duration without traffic (OSRM / OpenStreetMap)',
@@ -334,6 +337,8 @@
       recoPollenLow: function(s) { return 'Moderate pollen ('+s+')'; },
       recoAqiBad: function(v) { return 'Poor air quality (AQI '+v+') — FFP2 mask recommended outdoors'; },
       recoAqiMed: function(v) { return 'Moderate air quality (AQI '+v+') — avoid intense outdoor effort'; },
+      recoSo2: function(v) { return 'High sulfur dioxide ('+v+' μg/m³) — limit exertion'; },
+      recoCo: function(v) { return 'High carbon monoxide ('+v+' μg/m³) — avoid congested areas'; },
       recoStorm: 'Thunderstorm forecast — postpone if possible',
       recoRainHeavy: 'Heavy showers — waterproof jacket recommended',
       recoRain: 'Rain forecast — bring a raincoat',
@@ -372,6 +377,7 @@
       airPollNA: '⏱ Pollutant data unavailable for this day.',
       pm25: 'Fine particles', pm10: 'Coarse particles',
       no2: 'Nitrogen dioxide', ozone: 'Tropospheric ozone',
+      so2: 'Sulfur dioxide', co: 'Carbon monoxide',
       pollutantsNA: 'Pollutant data unavailable',
       /* Score */
       scoreDetail: function(s) { return 'Score '+s+'/100 · weather + air + pollen'; },
@@ -1488,13 +1494,13 @@
 
     // Pollen (SILAM model) only available in Europe
     var pollenVars = inEU
-      ? ',alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen'
+      ? ',alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen'
       : '';
 
     var forecastDays = Math.min(offset + 2, 6);
     var url = 'https://air-quality-api.open-meteo.com/v1/air-quality?' +
       'latitude=' + lat + '&longitude=' + lon +
-      '&hourly=' + aqiVar + ',pm2_5,pm10,nitrogen_dioxide,ozone' + pollenVars +
+      '&hourly=' + aqiVar + ',pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide' + pollenVars +
       '&timezone=auto&forecast_days=' + forecastDays;
 
     return fetchWithTimeout(url, {}, 8000)
@@ -1512,7 +1518,7 @@
           var v = safeVal(arr, idx); return v !== null ? Math.round(v) : null;
         }
         function safeFix(arr, idx) {
-          var v = safeVal(arr, idx); return v !== null ? (+v).toFixed(1) : null;
+          var v = safeVal(arr, idx); return v !== null ? Math.round(v * 10) / 10 : null;
         }
 
         var hi = hourlyIndex(h.time, queryDate, queryHour, offset * 24 + queryHour);
@@ -1525,6 +1531,8 @@
         var pm10 = safeFix(h.pm10, hi);
         var no2  = safeFix(h.nitrogen_dioxide, hi);
         var o3   = safeFix(h.ozone, hi);
+        var so2  = safeFix(h.sulphur_dioxide, hi);
+        var co   = safeFix(h.carbon_monoxide, hi);
 
         var pn = t('pollenNames');
         var pollens = {}, polMax = 0, polActifs = [], polNiveau = {l:t('pollenNA'),c:'bb'};
@@ -1532,12 +1540,13 @@
 
         if (inEU && h.alder_pollen) {
           var pollenArrays = [h.alder_pollen, h.birch_pollen, h.grass_pollen,
-                              h.mugwort_pollen, h.olive_pollen];
+                              h.mugwort_pollen, h.olive_pollen, h.ragweed_pollen];
           pollens[pn.Aulne]     = safeRound(h.alder_pollen, hi)  || 0;
           pollens[pn.Bouleau]   = safeRound(h.birch_pollen, hi)  || 0;
           pollens[pn.Graminées] = safeRound(h.grass_pollen, hi)  || 0;
           pollens[pn.Armoise]   = safeRound(h.mugwort_pollen, hi)|| 0;
           pollens[pn.Olivier]   = safeRound(h.olive_pollen, hi)  || 0;
+          pollens[pn.Ambroisie] = safeRound(h.ragweed_pollen, hi)|| 0;
           pollenNotAvailable = !pollenArrays.some(function(arr) { return safeVal(arr, hi) !== null; });
           polMax = Math.max.apply(null, Object.values(pollens));
           polActifs = Object.keys(pollens).filter(function(k) { return pollens[k] > 2; });
@@ -1555,6 +1564,8 @@
           pm10: outOfRange ? null : pm10,
           o3: outOfRange ? null : o3,
           no2: outOfRange ? null : no2,
+          so2: outOfRange ? null : so2,
+          co: outOfRange ? null : co,
           pollens: pollenNotAvailable ? {} : pollens,
           polMax: pollenNotAvailable ? 0 : polMax,
           polActifs: pollenNotAvailable ? [] : polActifs,
@@ -2288,7 +2299,9 @@
       pollutantPenalty(aq.pm25, 25, 15, 10),
       pollutantPenalty(aq.pm10, 50, 30, 20),
       pollutantPenalty(aq.no2, 40, 25, 15),
-      pollutantPenalty(aq.o3, 120, 100, 80)
+      pollutantPenalty(aq.o3, 120, 100, 80),
+      pollutantPenalty(aq.so2, 125, 80, 40),
+      pollutantPenalty(aq.co, 10000, 6000, 4000)
     );
     s -= airPenalty;
 
@@ -2506,6 +2519,8 @@
     else if (num(aq.polMax)>10) list.push(t('recoPollenLow')((aq.polActifs||[]).join(', ')));
     if (num(aq.aqi)>100) list.push(t('recoAqiBad')(aq.aqi));
     else if (num(aq.aqi)>60) list.push(t('recoAqiMed')(aq.aqi));
+    if (num(aq.so2)>=125) list.push(t('recoSo2')(aq.so2));
+    if (num(aq.co)>=10000) list.push(t('recoCo')(aq.co));
     if (c!==null && c>=95) list.push(t('recoStorm'));
     else if (num(m.precipMm)>=10) list.push(t('recoRainAmount')(m.precipMm));
     else if (c!==null && c>=80) list.push(t('recoRainHeavy'));
@@ -2610,6 +2625,8 @@
           '<div class="wg">'+
           (aq.pm25!=null?'<div class="wstat"><div class="wsl">PM₂.₅</div><div class="wsv" style="font-size:.78rem">'+aq.pm25+' μg/m³</div></div>':'')+
           (aq.pm10!=null?'<div class="wstat"><div class="wsl">PM₁₀</div><div class="wsv" style="font-size:.78rem">'+aq.pm10+' μg/m³</div></div>':'')+
+          (aq.so2!=null?'<div class="wstat"><div class="wsl">SO₂</div><div class="wsv" style="font-size:.78rem">'+aq.so2+' μg/m³</div></div>':'')+
+          (aq.co!=null?'<div class="wstat"><div class="wsl">CO</div><div class="wsv" style="font-size:.78rem">'+aq.co+' μg/m³</div></div>':'')+
           '</div>'
       )+'</div></div>'+
 
@@ -2692,7 +2709,8 @@
       polluantsHTML = '<div class="info-note">'+t('airPollNA')+'</div>';
     } else {
       var polluants=[['PM₂.₅',aq.pm25,'μg/m³',25,t('pm25')],['PM₁₀',aq.pm10,'μg/m³',50,t('pm10')],
-        ['NO₂',aq.no2,'μg/m³',40,t('no2')],['Ozone',aq.o3,'μg/m³',120,t('ozone')]];
+        ['NO₂',aq.no2,'μg/m³',40,t('no2')],['Ozone',aq.o3,'μg/m³',120,t('ozone')],
+        ['SO₂',aq.so2,'μg/m³',40,t('so2')],['CO',aq.co,'μg/m³',4000,t('co')]];
       polluantsHTML = polluants.map(function(p){
         if(p[1]==null) return '';
         var n=+p[1],col=n<p[3]*0.5?'#10B981':n<p[3]?'#F59E0B':'#EF4444';
@@ -3067,7 +3085,7 @@
     }
 
     function defaultAirQuality() {
-      return { aqi:null, pm25:null, pm10:null, o3:null, no2:null,
+      return { aqi:null, pm25:null, pm10:null, o3:null, no2:null, so2:null, co:null,
                pollens:{}, polMax:0, polActifs:[], polNiveau:{l:'—',c:'bb'} };
     }
 

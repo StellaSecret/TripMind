@@ -49,15 +49,19 @@ test.describe('Score calculation — three thresholds', () => {
   });
 
   test('weather is sampled at the OSRM route midpoint', async ({ page }) => {
-    const lats: number[] = [];
-    page.on('request', req => {
-      if (/api\.open-meteo\.com\/v1\/forecast/.test(req.url())) {
-        const lat = Number(new URL(req.url()).searchParams.get('latitude'));
-        if (Number.isFinite(lat)) lats.push(lat);
-      }
+    const lons: number[] = [];
+    await mockGoodConditions(page);
+    await page.route(/api\.open-meteo\.com\/v1\/forecast/, route => {
+      const lon = Number(new URL(route.request().url()).searchParams.get('longitude'));
+      if (Number.isFinite(lon)) lons.push(lon);
+      return route.fallback();
     });
-    await runMockedAnalysis(page, mockGoodConditions);
-    expect(lats.some(lat => lat > 2.8 && lat < 2.9)).toBe(true);
+    await gotoSearch(page);
+    await page.locator(SEL.origInput).fill('Paris');
+    await page.locator(SEL.destInput).fill('Lyon');
+    await page.locator(SEL.analyzeBtn).click();
+    await expect(page.locator(SEL.scrDash)).toHaveClass(/\bon\b/, { timeout: 15_000 });
+    expect(lons.some(lon => lon > 2.8 && lon < 2.9)).toBe(true);
   });
 });
 
@@ -190,11 +194,17 @@ test.describe('Tab: Air & Pollen', () => {
     await expect(page.locator(SEL.tabContent)).toContainText('Graminées');
   });
 
-  test('shows all 5 pollen species', async ({ page }) => {
+  test('shows all 6 pollen species', async ({ page }) => {
     const content = await page.locator(SEL.tabContent).textContent();
-    for (const p of ['Aulne', 'Bouleau', 'Graminées', 'Armoise', 'Olivier']) {
+    for (const p of ['Aulne', 'Bouleau', 'Graminées', 'Armoise', 'Olivier', 'Ambroisie']) {
       expect(content).toContain(p);
     }
+  });
+
+  test('shows SO₂ and CO readings', async ({ page }) => {
+    const content = await page.locator(SEL.tabContent).textContent();
+    expect(content).toContain('SO₂');
+    expect(content).toContain('CO');
   });
 });
 
