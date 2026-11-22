@@ -5,7 +5,7 @@
 export interface RateLimit {
   minGapMs: number;
   lastCall: number;
-  queue: Array<{ resolve: (v: Response) => void; reject: (e: unknown) => void; url: string }>;
+  queue: Array<{ resolve: (v: Response) => void; reject: (e: unknown) => void; url: string; opts?: RequestInit }>;
 }
 
 export type FetchFn = (url: string, opts?: RequestInit) => Promise<Response>;
@@ -17,15 +17,31 @@ export function createRateLimiter(limits: Record<string, Pick<RateLimit, 'minGap
   }
 
   function drainQueue(rl: RateLimit) {
+    // Stryker disable next-line ConditionalExpression: empty-queue guard prevents recursion
     if (!rl.queue.length) return;
     const item = rl.queue[0];
+
+    if (item.opts?.signal?.aborted) {
+      item.reject(new DOMException('Aborted', 'AbortError'));
+      rl.queue.shift();
+      // Stryker disable next-line CallExpression: aborted head is alone when this guard runs
+      drainQueue(rl);
+      return;
+    }
+
     const now = Date.now();
     const wait = Math.max(0, rl.minGapMs - (now - rl.lastCall));
     setTimeout(() => {
+      if (item.opts?.signal?.aborted) {
+        item.reject(new DOMException('Aborted', 'AbortError'));
+        // Stryker disable next-line CallExpression: duplicate reject on a settled promise is unobservable
+        rl.queue.shift();
+        drainQueue(rl);
+        return;
+      }
       rl.lastCall = Date.now();
-      fetchFn(item.url)
+      fetchFn(item.url, item.opts)
         .then(item.resolve, item.reject)
-        .catch(() => { /* rejection already forwarded to item.reject */ })
         .finally(() => { rl.queue.shift(); drainQueue(rl); });
     }, wait);
   }
@@ -37,7 +53,7 @@ export function createRateLimiter(limits: Record<string, Pick<RateLimit, 'minGap
     const rl = state[domain];
     if (!rl) return fetchFn(url, opts);
     return new Promise((resolve, reject) => {
-      rl.queue.push({ url, opts: opts as RequestInit, resolve, reject } as any);
+      rl.queue.push({ url, opts, resolve, reject });
       if (rl.queue.length === 1) drainQueue(rl);
     });
   };

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRateLimiter } from '../lib/ratelimit';
 
 const NOMINATIM = 'nominatim.openstreetmap.org';
@@ -20,10 +20,19 @@ describe('Rate limiter — basic passthrough', () => {
     await fetch(`https://${NOMINATIM}/search?q=Paris`);
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards opts for passthrough domains', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok'));
+    const fetch = createRateLimiter({}, mockFetch);
+    const opts = { headers: { 'X-Test': '1' } };
+    await fetch('https://api.open-meteo.com/data', opts);
+    expect(mockFetch).toHaveBeenCalledWith('https://api.open-meteo.com/data', opts);
+  });
 });
 
 describe('Rate limiter — queuing', () => {
   beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
 
   it('queues a second request if first just fired', async () => {
     let callCount = 0;
@@ -100,9 +109,67 @@ describe('Rate limiter — queuing', () => {
     await p2;
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('forwards opts for queued limited requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok'));
+    const rl = createRateLimiter({ [NOMINATIM]: { minGapMs: 100 } }, mockFetch);
+    const url = `https://${NOMINATIM}/search?q=Paris`;
+    const opts = { headers: { 'X-Test': '1' } };
+
+    const p = rl(url, opts);
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(mockFetch).toHaveBeenCalledWith(url, opts);
+  });
+
+  it('rejects already-aborted queued requests without fetching', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok'));
+    const rl = createRateLimiter({ [NOMINATIM]: { minGapMs: 100 } }, mockFetch);
+    const controller = new AbortController();
+    controller.abort();
+    const result = await rl(`https://${NOMINATIM}/search?q=Paris`, { signal: controller.signal })
+      .catch((e) => e);
+    const next = rl(`https://${NOMINATIM}/search?q=Lyon`);
+
+    await vi.runAllTimersAsync();
+    await next;
+
+    expect(result).toBeInstanceOf(DOMException);
+    expect((result as DOMException).name).toBe('AbortError');
+    expect((result as DOMException).message).toBe('Aborted');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(`https://${NOMINATIM}/search?q=Lyon`, undefined);
+  });
+
+  it('rejects requests aborted while waiting and drains the next item', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok'));
+    const rl = createRateLimiter({ [NOMINATIM]: { minGapMs: 1000 } }, mockFetch);
+
+    const first = rl(`https://${NOMINATIM}/a`);
+    await vi.runAllTimersAsync();
+    await first;
+
+    const controller = new AbortController();
+    const aborted = rl(`https://${NOMINATIM}/b`, { signal: controller.signal }).catch((e) => e);
+    const next = rl(`https://${NOMINATIM}/c`);
+    controller.abort();
+
+    await vi.runAllTimersAsync();
+    const result = await aborted;
+    await next;
+
+    expect(result).toBeInstanceOf(DOMException);
+    expect((result as DOMException).name).toBe('AbortError');
+    expect((result as DOMException).message).toBe('Aborted');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenLastCalledWith(`https://${NOMINATIM}/c`, undefined);
+  });
 });
 
 describe('Rate limiter — error handling', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('propagates fetch errors to caller', async () => {
     vi.useFakeTimers();
     const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
